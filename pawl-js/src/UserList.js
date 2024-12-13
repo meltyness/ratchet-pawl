@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { X, EditCircle, User, UserX, UserPlus, Users } from 'tabler-icons-react';
 import UserEditor from './UserEditor'; // Adjust the path as necessary
 
 const defaultUsers = [
@@ -53,31 +54,34 @@ export default function UserList () {
 
     return (
         <div>
+            <h1><Users /> Add or Edit Users!</h1>
+            <p>These are users authorized to access network system consoles.</p>
             {users.map(user => (
                 <div key={user.id}>
                     {editingUserId === user.id ? (
                         <div>
                             <UserEditor initialUsername={user.username} lockUsername={true} addComplete={handleCancelEdit}/>
-                            <button onClick={() => handleCancelEdit()}>Cancel</button>
+                            <button onClick={() => handleCancelEdit()}><X /></button>
                         </div>
                     ) : (
                         <div>
+                            <User />
                             <span>{user.username}</span>
-                            <button onClick={() => handleEdit(user.id)}>Edit</button>
-                            <button onClick={() => handleDelete(user.id)}>Delete</button>
+                            <button onClick={() => handleEdit(user.id)}><EditCircle size={16} /></button>
+                            <button onClick={() => handleDelete(user.id)}><UserX size={16}/></button>
                         </div>
                     )}
                 </div>
             ))}
-        
+        <hr />
         {addingUser ? (
                 <div>
                     <UserEditor addComplete={createdUser}/>
-                    <button onClick={toggleAddingUser} >Cancel</button>
+                    <button onClick={toggleAddingUser} ><X /></button>
                 </div>
             ) : (
                 <div>
-                    <button onClick={toggleAddingUser}>Add...</button>
+                    <button onClick={toggleAddingUser}><UserPlus /></button>
                 </div>
             )
         }

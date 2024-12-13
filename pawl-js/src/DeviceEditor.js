@@ -1,23 +1,23 @@
 import { useState } from 'react';
 
-export default function UserEditor({ initialUsername = '', lockUsername = false, addComplete = () => {}}) {
-    const [username, setUsername] = useState(initialUsername);
-    const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
+export default function DeviceEditor({ initialNetworkId = '', editingNetworkId = false, addComplete = () => {}}) {
+    const [networkid, setNetworkid] = useState(initialNetworkId);
+    const [key, setKey] = useState('');
+    const [confirmKey, setConfirmKey] = useState('');
     const [error, setError] = useState('');
 
     const handleSubmit = (event) => {
         event.preventDefault();
-        if (password !== confirmPassword) {
-            setError('Passwords do not match');
+        if (key !== confirmKey) {
+            setError('TACACS+ Keys do not match');
             return;
         }
         var data = new FormData();
-        data.append('username', username);
-        data.append('passhash', confirmPassword);
+        data.append('networkid', networkid);
+        data.append('passhash', confirmKey);
         
         var xhr = new XMLHttpRequest();
-        xhr.open('POST', 'adduser', true);
+        xhr.open('POST', 'adddevice', true);
         xhr.onload = function () {
             // do something to response
             console.log(this.responseText);
@@ -26,50 +26,49 @@ export default function UserEditor({ initialUsername = '', lockUsername = false,
 
         // Signal up to collection that we're done
         // or maybe nothing.
-        addComplete(username);
+        addComplete(networkid);
 
         setError('');
     };
 
     let actionName;
-    if(lockUsername) {
+    if(editingNetworkId) {
         actionName = "Save Changes";
     } else {
-        actionName = "Add User";
+        actionName = "Add Device";
     }
 
     return (
         <div>
-            {lockUsername ? ( <h2>Edit User</h2>) : (<h2>Add User</h2>)}
+            {editingNetworkId ? ( <h2>Edit System</h2>) : (<h2>Add System</h2>)}
             <form onSubmit={handleSubmit}>
                 <div>
-                    <label>Username:</label>
+                    <label>Network ID:</label>
                     <input
                         type="text"
-                        autocomplete="username"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        disabled={lockUsername}
+                        autocomplete="networkid"
+                        value={networkid}
+                        onChange={(e) => setNetworkid(e.target.value)}
                         required
                     />
                 </div>
                 <div>
-                    <label>Password:</label>
+                    <label>TACACS+ Key:</label>
                     <input
                         type="password"
                         autocomplete="new-password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        value={key}
+                        onChange={(e) => setKey(e.target.value)}
                         required
                     />
                 </div>
                 <div>
-                    <label>Confirm Password:</label>
+                    <label>Confirm Key:</label>
                     <input
                         type="password"
                         autocomplete="new-password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        value={confirmKey}
+                        onChange={(e) => setConfirmKey(e.target.value)}
                         required
                     />
                 </div>

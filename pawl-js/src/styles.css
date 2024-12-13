@@ -1,7 +1,7 @@
 * {
     box-sizing: border-box;
   }
-  
+
   body {
     font-family: sans-serif;
     margin: 20px;
@@ -9,8 +9,8 @@
   }
   
   h1 {
-    margin-top: 0;
-    font-size: 22px;
+    margin-top: 16px;
+    font-size: 32px;
   }
   
   h2 {
@@ -44,6 +44,23 @@
   
   ul {
     padding-inline-start: 20px;
+  }
+
+  .sidebar-container { 
+    box-shadow: rgba(3, 102, 214, 0.3) 0px 0px 0px 3px;
+    width: fit-content;
+  }
+
+  .sidebar-div {
+    padding:8px;
+  }
+
+  .sidebar-item {
+    box-shadow: rgba(0, 0, 0, 0.16) 0px 1px 4px, rgb(51, 51, 51) 0px 0px 0px 3px;
+  }
+
+  .sidebar-item:hover {
+    box-shadow: rgba(0, 0, 0, 0.16) 0px 1px 4px, rgb(71, 91, 71) 0px 0px 0px 3px;
   }
   
   * {

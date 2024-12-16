@@ -20,14 +20,60 @@ use rocket::serde::{json::Json, Serialize};
 
 use lazy_static::lazy_static;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::{collections::HashMap, marker::PhantomData};
 
 use redb::{Database, ReadableTable, TableDefinition};
 
-// TODO: What happens if we modify the user format by adding a field do we have to make it option type?
-const RATCHET_USERS_TABLE: TableDefinition<&str, &str> = TableDefinition::new("ratchet_users");
-const RATCHET_DEVS_TABLE: TableDefinition<&str, &str> = TableDefinition::new("ratchet_devs");
+const THE_DATABASE: &str = "ratchet_db.redb";
 
+/// Wraps the tables to provide type protection based on the original declaration.
+struct ReadWriteTable<'a, K, V, T>(TableDefinition<'a, K, V>, PhantomData<T>) where
+K: redb::Key + 'static,
+V: redb::Value + 'static,
+T: Serialize + Deserialize<'a> + RatchetKeyed;
+
+impl<'a, T> ReadWriteTable<'a, &'a str, &'a str, T> where T: Serialize + Deserialize<'a> + RatchetKeyed {
+    pub async fn write(&'static self, item: &T) -> Result<(), redb::Error> {
+        let db = Database::create(THE_DATABASE)?;
+        let write_txn = db.begin_write()?;
+        {
+            let mut table = write_txn.open_table(self.unwrap())?;
+            let ser = serde_json::to_string(&item).unwrap();
+            let my_key = item.into_key();
+            
+            table.insert(my_key, ser.as_str())?;
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
+
+    pub async fn rm(&'static self, item: &T) -> Result<(), redb::Error>{
+        let db = Database::create(THE_DATABASE)?;
+        let write_txn = db.begin_write()?;
+        {
+            let mut table = write_txn.open_table(self.unwrap())?;
+            let my_key = item.into_key();
+            
+            table.remove(my_key)?;
+        }
+        write_txn.commit()?;
+        Ok(())
+    } 
+
+    pub fn unwrap(&self) -> TableDefinition<'static, &str, &str> {
+        self.0.to_owned()
+    }
+}
+
+trait RatchetKeyed {
+    fn into_key<'k>(&self) -> &str;
+}
+
+// TODO: What happens if we modify the user format by adding a field do we have to make it option type?
+const RATCHET_USERS_TABLE: ReadWriteTable<&str, &str, RatchetUserEntry> = 
+    ReadWriteTable::<&str, &str, RatchetUserEntry>(TableDefinition::new("ratchet_users"), PhantomData);
+const RATCHET_DEVS_TABLE: ReadWriteTable<&str, &str, RatchetDevEntry> = 
+    ReadWriteTable::<&str, &str, RatchetDevEntry>(TableDefinition::new("ratchet_devs"), PhantomData);
 
 lazy_static! {
     static ref RATCHET_USERS: Mutex<HashMap<String, RatchetUserEntry>> = {
@@ -46,12 +92,18 @@ struct RatchetUserEntry {
     passhash: String,
 }
 
+impl RatchetKeyed for RatchetUserEntry{
+    fn into_key(&self) -> &str {
+        &self.username.as_str()
+    }
+}
+
 #[post("/rmuser", format = "multipart/form-data", data = "<username>")]
 async fn rm_user(username: Form<String>) -> status::Custom<&'static str> {
     let mut users = RATCHET_USERS.lock().await;
     match users.remove(&*username) {
-        Some(_) => {
-            rtp_rm_user(username.clone()).await.expect("Database Error: ");
+        Some(user) => {
+            RATCHET_USERS_TABLE.rm(&user).await.expect("Database error");
             status::Custom(Status::Ok, "")
         },
         None => status::Custom(Status::Gone, ""),
@@ -62,19 +114,17 @@ async fn rm_user(username: Form<String>) -> status::Custom<&'static str> {
 async fn add_user(newuser: Form<RatchetUserEntry>) -> status::Custom<&'static str> {
     let mut users = RATCHET_USERS.lock().await;
     if !users.contains_key(&newuser.username) {
+        let new_entry = RatchetUserEntry {
+            username: newuser.username.clone(),
+            passhash: newuser.passhash.clone(),
+        };
+
+        RATCHET_USERS_TABLE.write(&new_entry).await.expect("Database error");
+
         users.insert(
-            newuser.username.clone(),
-            RatchetUserEntry {
-                username: newuser.username.clone(),
-                passhash: newuser.passhash.clone(),
-            },
+            newuser.username.clone(), new_entry
         );
-        rtp_write_user(
-            RatchetUserEntry {
-                username: newuser.username.clone(),
-                passhash: newuser.passhash.clone(),
-            },
-        ).await.expect("Database Error: ");
+        
         status::Custom(Status::Ok, "")
     } else {
         status::Custom(Status::Conflict, "")
@@ -83,16 +133,13 @@ async fn add_user(newuser: Form<RatchetUserEntry>) -> status::Custom<&'static st
 
 #[post("/edituser", format = "multipart/form-data", data = "<edited>")]
 async fn edit_user(edited: Form<RatchetUserEntry>) -> status::Custom<&'static str> {
-    let users = RATCHET_USERS.lock().await;
+    let mut users = RATCHET_USERS.lock().await;
     if !users.contains_key(&edited.username) {
         status::Custom(Status::Gone, "")
     } else {
-        rtp_write_user(
-            RatchetUserEntry {
-                username: edited.username.clone(),
-                passhash: edited.passhash.clone(),
-            },
-        ).await.expect("Database Error");
+        let user_update = edited.to_owned();
+        RATCHET_USERS_TABLE.write(&user_update).await.expect("Database error");
+        users.insert(user_update.username.clone(), user_update);
         status::Custom(Status::Ok, "")
     }
 }
@@ -121,18 +168,18 @@ struct RatchetDevEntry {
     key: String,
 }
 
-#[derive(Clone, FromForm, Debug, Serialize)]
-struct NewDev {
-    network_id: String,
-    key: String,
+impl RatchetKeyed for RatchetDevEntry{
+    fn into_key(&self) -> &str {
+        self.network_id.as_str()
+    }
 }
 
 #[post("/rmdev", format = "multipart/form-data", data = "<network_id>")]
 async fn rm_dev(network_id: Form<String>) -> status::Custom<&'static str> {
     let mut devs = RATCHET_DEVICES.lock().await;
     match devs.remove(&*network_id) {
-        Some(_) => {
-            rtp_rm_dev(network_id.clone()).await.expect("Database Error: ");
+        Some(dev) => {
+            RATCHET_DEVS_TABLE.rm(&dev).await.expect("Database error");
             status::Custom(Status::Ok, "")
         },
         None => status::Custom(Status::Gone, ""),
@@ -140,23 +187,13 @@ async fn rm_dev(network_id: Form<String>) -> status::Custom<&'static str> {
 }
 
 #[post("/adddev", format = "multipart/form-data", data = "<newdev>")]
-async fn add_dev(newdev: Form<NewDev>) -> status::Custom<&'static str> {
+async fn add_dev(newdev: Form<RatchetDevEntry>) -> status::Custom<&'static str> {
     let mut devs = RATCHET_DEVICES.lock().await;
     // TODO: Replace this with networkier stuff
     if !devs.contains_key(&newdev.network_id) {
-        devs.insert(
-            newdev.network_id.clone(),
-            RatchetDevEntry {
-                network_id: newdev.network_id.clone(),
-                key: newdev.key.clone(),
-            },
-        );
-        rtp_write_dev(
-            RatchetDevEntry {
-                network_id: newdev.network_id.clone(),
-                key: newdev.key.clone(),
-            },
-        ).await.expect("Database Error: ");
+        let new_dev = newdev.to_owned();
+        RATCHET_DEVS_TABLE.write(&new_dev).await.expect("Database error");
+        devs.insert(new_dev.network_id.clone(), new_dev);
         status::Custom(Status::Ok, "")
     } else {
         status::Custom(Status::Conflict, "")
@@ -164,17 +201,14 @@ async fn add_dev(newdev: Form<NewDev>) -> status::Custom<&'static str> {
 }
 
 #[post("/editdev", format = "multipart/form-data", data = "<edited>")]
-async fn edit_dev(edited: Form<NewDev>) -> status::Custom<&'static str> {
-    let devs = RATCHET_DEVICES.lock().await;
+async fn edit_dev(edited: Form<RatchetDevEntry>) -> status::Custom<&'static str> {
+    let mut devs = RATCHET_DEVICES.lock().await;
     if !devs.contains_key(&edited.network_id) {
         status::Custom(Status::Gone, "")
     } else {
-        rtp_write_dev(
-            RatchetDevEntry {
-                network_id: edited.network_id.clone(),
-                key: edited.key.clone(),
-            },
-        ).await.expect("Database Error: ");
+        let dev_update = edited.to_owned();
+        RATCHET_DEVS_TABLE.write(&dev_update).await.expect("Database error");
+        devs.insert(dev_update.network_id.clone(), dev_update);
         status::Custom(Status::Ok, "")
     }
 }
@@ -213,17 +247,17 @@ async fn rocket() -> _ {
 }
 
 async fn rtp_import_database() -> Result<(), redb::Error> {
-    let db = Database::create("ratchet_db.redb")?;
+    let db = Database::create(THE_DATABASE)?;
     let mut users_init = RATCHET_USERS.lock().await;
     let mut devs_init = RATCHET_DEVICES.lock().await;
     let write_txn = db.begin_write()?;
     {
-        write_txn.open_table(RATCHET_USERS_TABLE)?;
-        write_txn.open_table(RATCHET_DEVS_TABLE)?;
+        write_txn.open_table(RATCHET_USERS_TABLE.unwrap())?;
+        write_txn.open_table(RATCHET_DEVS_TABLE.unwrap())?;
     }
     write_txn.commit()?;
     let read_txn = db.begin_read()?;
-    let table = read_txn.open_table(RATCHET_USERS_TABLE)?;
+    let table = read_txn.open_table(RATCHET_USERS_TABLE.unwrap())?;
 
     let table_iter = table.iter()?;
     table_iter.for_each(|tup| {
@@ -237,7 +271,7 @@ async fn rtp_import_database() -> Result<(), redb::Error> {
     });
 
     let read_txn = db.begin_read()?;
-    let table = read_txn.open_table(RATCHET_DEVS_TABLE)?;
+    let table = read_txn.open_table(RATCHET_DEVS_TABLE.unwrap())?;
 
     let table_iter = table.iter()?;
     table_iter.for_each(|tup| {
@@ -250,53 +284,6 @@ async fn rtp_import_database() -> Result<(), redb::Error> {
         devs_init.insert(key.to_string(), new_dev);
     });
 
-    Ok(())
-}
-
-async fn rtp_write_user(user: RatchetUserEntry) -> Result<(), redb::Error> {
-    let db = Database::create("ratchet_db.redb")?;
-    let write_txn = db.begin_write()?;
-    {
-        let mut table = write_txn.open_table(RATCHET_USERS_TABLE)?;
-        let ser = serde_json::to_string(&user).unwrap();
-        table.insert(&*user.username, &*ser)?;
-    }
-    write_txn.commit()?;
-    Ok(())
-}
-
-async fn rtp_rm_user(usr: String) -> Result<(), redb::Error> {
-    let db = Database::create("ratchet_db.redb")?;
-    let write_txn = db.begin_write()?;
-    {
-        let mut table = write_txn.open_table(RATCHET_USERS_TABLE)?;
-        println!("Removing {:?}", usr);
-        table.remove(&*usr)?;
-    }
-    write_txn.commit()?;
-    Ok(())
-}
-
-async fn rtp_write_dev(dev: RatchetDevEntry) -> Result<(), redb::Error> {
-    let db = Database::create("ratchet_db.redb")?;
-    let write_txn = db.begin_write()?;
-    {
-        let mut table = write_txn.open_table(RATCHET_DEVS_TABLE)?;
-        let ser = serde_json::to_string(&dev).unwrap();
-        table.insert(&*dev.network_id, &*ser)?;
-    }
-    write_txn.commit()?;
-    Ok(())
-}
-
-async fn rtp_rm_dev(dev: String) -> Result<(), redb::Error> {
-    let db = Database::create("ratchet_db.redb")?;
-    let write_txn = db.begin_write()?;
-    {
-        let mut table = write_txn.open_table(RATCHET_DEVS_TABLE)?; // TODO: into the type system
-        table.remove(&*dev)?;
-    }
-    write_txn.commit()?;
     Ok(())
 }
 

@@ -1,12 +1,14 @@
 import { useState } from 'react';
 
-export default function UserEditor({ initialUsername = '', lockUsername = false, addComplete = () => {}}) {
+export default function UserEditor({ initialUsername = '', 
+                                     lockUsername = false, 
+                                     addComplete = () => {}}) {
     const [username, setUsername] = useState(initialUsername);
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
 
-    const handleSubmit = (event) => {
+    const handleSubmit = async (event) => {
         event.preventDefault();
         if (password !== confirmPassword) {
             setError('Passwords do not match');
@@ -14,21 +16,24 @@ export default function UserEditor({ initialUsername = '', lockUsername = false,
         }
         var data = new FormData();
         data.append('username', username);
+        // TODO: Actually hash the password on the client.
         data.append('passhash', confirmPassword);
         
-        var xhr = new XMLHttpRequest();
-        xhr.open('POST', 'adduser', true);
-        xhr.onload = function () {
-            // do something to response
-            console.log(this.responseText);
-        };
-        xhr.send(data);
+        var updateType = !lockUsername ? 'adduser' : 'edituser';
+        const response = await fetch(updateType, {
+            method: "POST",
+            body: data
+        });
 
-        // Signal up to collection that we're done
-        // or maybe nothing.
-        addComplete(username);
-
-        setError('');
+        if (response.status == 200) {
+            addComplete(username);
+        } else {
+            if (lockUsername) {
+                setError('User no longer exists!');
+            } else {
+                setError('User already exists!');
+            }
+        }
     };
 
     let actionName;

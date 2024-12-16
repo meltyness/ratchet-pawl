@@ -3,31 +3,43 @@ import { X, EditCircle, Network, PencilPlus, Trash, Router } from 'tabler-icons-
 
 import DeviceEditor from './DeviceEditor'; // Adjust the path as necessary
 
-const defaultDevices = [
-    { id: 1, network_id: '127.0.0.0/24' },
-    { id: 2, network_id: '127.0.0.0/28' },
-    { id: 3, network_id: '127.0.0.0/32' },
-];
-
 export default function DeviceList () {
-    const [devices, setDevices] = useState(defaultDevices);
+    const [devices, setDevices] = useState([]);
     const [editingDeviceId, setEditingDeviceId] = useState(null);
     const [addingDevice, setAddingDevice] = useState(false);
 
-    function useEffect() {
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', 'getdevices', true);
-        xhr.onload = function () {
-            // do something to response
-            console.log(this.responseText);
-        };
-        
-        xhr.send(data);
-    }
+    const init = async() => {
+        const response = await fetch('getdevs');
+        const initDevs = await response.json();
+        initDevs.forEach((obj, index) => {
+            obj['id'] = index;
+        });
+        setDevices( devices.concat(
+            initDevs
+        ));
+      };
 
-    const handleDelete = (id) => {
-        setDevices(devices.filter(dev => dev.id !== id));
-        console.log(`Deleted device with ID: ${id}`);
+    useEffect( () => { init() }, []);
+
+    const sendRemoveDevRequest = async(id) => {
+        var data = new FormData();
+        data.append('network_id', devices.find(dev => dev.id === id).network_id);
+        data.append('key', "");
+        const response = await fetch('rmdev', {
+            method: "POST",
+            body: data,
+        });
+
+        const success = (response.status === 200 || response.status === 410);
+        return success;
+    };
+
+    const handleDelete = async(id) => {
+        if (await sendRemoveDevRequest(id)) {
+            setDevices(devices.filter(dev => dev.id !== id));
+        } else {
+            alert("Error!"); // TODO: Better feedback.
+        }
     };
 
     const handleEdit = (id) => {
@@ -52,11 +64,15 @@ export default function DeviceList () {
     function toggleAddingDevice() {
         setAddingDevice(!addingDevice);
     }
-
+    // TODO: Make this a routing table.
     return (
         <div>
             <h1><Network /> Add or Edit Trusted Systems!</h1>
             <p> These are network machines that can talk to ratchet, and check passwords. </p>
+            <p> ⚡⚡ There's no confirmation dialog on deletion, it just deletes them! ⚡⚡</p>
+            {devices.length == 0 ? 
+               <h3>Define some systems to get started!</h3> : <nbsp></nbsp>
+            }
             {devices.map(dev => (
                 <div key={dev.id}>
                     {editingDeviceId === dev.id ? (

@@ -6,29 +6,32 @@ export default function DeviceEditor({ initialNetworkId = '', editingNetworkId =
     const [confirmKey, setConfirmKey] = useState('');
     const [error, setError] = useState('');
 
-    const handleSubmit = (event) => {
+    const handleSubmit = async (event) => {
         event.preventDefault();
         if (key !== confirmKey) {
-            setError('TACACS+ Keys do not match');
+            setError('Passwords do not match');
             return;
         }
         var data = new FormData();
-        data.append('networkid', networkid);
-        data.append('passhash', confirmKey);
+        data.append('network_id', networkid);
+        // TODO: Actually hash the password on the client.
+        data.append('key', confirmKey);
         
-        var xhr = new XMLHttpRequest();
-        xhr.open('POST', 'adddevice', true);
-        xhr.onload = function () {
-            // do something to response
-            console.log(this.responseText);
-        };
-        xhr.send(data);
+        var updateType = !editingNetworkId ? 'adddev' : 'editdev';
+        const response = await fetch(updateType, {
+            method: "POST",
+            body: data
+        });
 
-        // Signal up to collection that we're done
-        // or maybe nothing.
-        addComplete(networkid);
-
-        setError('');
+        if (response.status == 200) {
+            addComplete(networkid);
+        } else {
+            if (editingNetworkId) {
+                setError('System no longer exists!');
+            } else {
+                setError('System already exists!');
+            }
+        }
     };
 
     let actionName;
@@ -49,6 +52,7 @@ export default function DeviceEditor({ initialNetworkId = '', editingNetworkId =
                         autocomplete="networkid"
                         value={networkid}
                         onChange={(e) => setNetworkid(e.target.value)}
+                        disabled={editingNetworkId}
                         required
                     />
                 </div>

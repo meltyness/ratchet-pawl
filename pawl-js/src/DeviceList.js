@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, EditCircle, Network, PencilPlus, Trash, Router } from 'tabler-icons-react';
+import { IconX, IconEditCircle, IconNetwork, IconPencilPlus, IconTrash, IconRouter } from '@tabler/icons-react';
 
 import DeviceEditor from './DeviceEditor'; // Adjust the path as necessary
 
@@ -71,7 +71,7 @@ export default function DeviceList ({authorizedRedirect}) {
     // TODO: Make this a routing table.
     return (
         <div>
-            <h1><Network /> Add or Edit Trusted Systems!</h1>
+            <h1><IconNetwork /> Add or Edit Trusted Systems!</h1>
             <p> These are network machines that can talk to ratchet, and check passwords. </p>
             <p> ⚡⚡ There's no confirmation dialog on deletion, it just deletes them! ⚡⚡</p>
             {devices.length == 0 ? 
@@ -82,14 +82,14 @@ export default function DeviceList ({authorizedRedirect}) {
                     {editingDeviceId === dev.id ? (
                         <div>
                             <DeviceEditor initialNetworkId={dev.network_id} editingNetworkId={true} addComplete={handleCancelEdit}/>
-                            <button onClick={() => handleCancelEdit()}><X /></button>
+                            <button onClick={() => handleCancelEdit()}><IconX /></button>
                         </div>
                     ) : (
                         <div>
-                            <Router />
+                            <IconRouter />
                             <span>{dev.network_id}</span>
-                            <button onClick={() => handleEdit(dev.id)}><EditCircle size={16}/></button>
-                            <button onClick={() => handleDelete(dev.id)}><Trash size={16}/></button>
+                            <button onClick={() => handleEdit(dev.id)}><IconEditCircle size={16}/></button>
+                            <button onClick={() => handleDelete(dev.id)}><IconTrash size={16}/></button>
                         </div>
                     )}
                 </div>
@@ -98,11 +98,11 @@ export default function DeviceList ({authorizedRedirect}) {
         {addingDevice ? (
                 <div>
                     <DeviceEditor addComplete={createdDevice}/>
-                    <button onClick={toggleAddingDevice}><X /></button>
+                    <button onClick={toggleAddingDevice}><IconX /></button>
                 </div>
             ) : (
                 <div>
-                    <button onClick={toggleAddingDevice}><PencilPlus /></button>
+                    <button onClick={toggleAddingDevice}><IconPencilPlus /></button>
                 </div>
             )
         }

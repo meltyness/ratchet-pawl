@@ -9,10 +9,10 @@
     "eject": "react-scripts eject"
   },
   "dependencies": {
+    "@tabler/icons-react": "^3.26.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
-    "react-scripts": "^5.0.1",
-    "tabler-icons-react": "^1.56.0"
+    "react-scripts": "^5.0.1"
   },
   "browserslist": {
     "production": [

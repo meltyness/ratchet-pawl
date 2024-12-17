@@ -6,7 +6,7 @@ import DeviceList from "./DeviceList"
 import PawlLogin from "./PawlLogin"
 import WelcomeLanding from "./WelcomeLanding"
 
-import { Home, Menu2, X } from 'tabler-icons-react';
+import { IconHome, IconMenu2, IconX } from '@tabler/icons-react';
 
 export default function HomePanel(){
     const [isSideBarVisible, setIsSideBarVisible] = useState(false); 
@@ -33,11 +33,11 @@ export default function HomePanel(){
         <div width="768">
             
         <button onClick={goHome}>
-            <Home />
+            <IconHome />
         </button>
 
         <button onClick={toggleSideBar}> 
-            {isSideBarVisible ? <X /> : <Menu2 />} 
+            {isSideBarVisible ? <IconX /> : <IconMenu2 />} 
         </button>
 
         {isSideBarVisible && <SideBar pageSetter={pageSelector}/>}

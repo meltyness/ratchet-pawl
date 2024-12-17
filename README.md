@@ -1,4 +1,5 @@
-⚠ It's not production-ready ⚠
+> [!CAUTION]
+> This is unstable and missing key security feature, use is not advised!
 # ratchet-pawl
 
 This is a minimalist frontend for configuring Ratchet. It is draft-phase, and absolutely needs a bit more polish.

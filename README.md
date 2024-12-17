@@ -44,7 +44,9 @@ You need to have npm
 Suggestion: https://github.com/nvm-sh/nvm
 - Just folow the instructions and install node it's pretty easy.
 
-`cd pawl-js`
+`git clone https://github.com/meltyness/ratchet-pawl`
 
-`npm start`
+`cd ratchet/pawl-js & npm run build &`
+
+`cd ../ & cargo run --release`
 

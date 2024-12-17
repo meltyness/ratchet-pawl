@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, EditCircle, User, UserX, UserPlus, Users } from 'tabler-icons-react';
+import { IconX, IconEditCircle, IconUser, IconUserX, IconUserPlus, IconUsers } from '@tabler/icons-react';
 import UserEditor from './UserEditor'; // Adjust the path as necessary
 
 export default function UserList ({authorizedRedirect}) {
@@ -70,7 +70,7 @@ export default function UserList ({authorizedRedirect}) {
 
     return (
         <div>
-            <h1><Users /> Add or Edit Users!</h1>
+            <h1><IconUsers /> Add or Edit Users!</h1>
             <p>These are users authorized to access network system consoles.</p>
             <p> ⚡⚡ There's no confirmation dialog on removal, it just removes them! ⚡⚡</p>
             {users.length == 0 ? 
@@ -81,14 +81,14 @@ export default function UserList ({authorizedRedirect}) {
                     {editingUserId === user.id ? (
                         <div>
                             <UserEditor initialUsername={user.username} lockUsername={true} addComplete={handleCancelEdit}/>
-                            <button onClick={() => handleCancelEdit()}><X /></button>
+                            <button onClick={() => handleCancelEdit()}><IconX /></button>
                         </div>
                     ) : (
                         <div>
-                            <User />
+                            <IconUser />
                             <span>{user.username}</span>
-                            <button onClick={() => handleEdit(user.id)}><EditCircle size={16} /></button>
-                            <button disabled={users.length <= 1} onClick={() => handleDelete(user.id)}><UserX size={16}/></button>
+                            <button onClick={() => handleEdit(user.id)}><IconEditCircle size={16} /></button>
+                            <button disabled={users.length <= 1} onClick={() => handleDelete(user.id)}><IconUserX size={16}/></button>
                         </div>
                     )}
                 </div>
@@ -97,11 +97,11 @@ export default function UserList ({authorizedRedirect}) {
         {addingUser ? (
                 <div>
                     <UserEditor addComplete={createdUser}/>
-                    <button onClick={toggleAddingUser} ><X /></button>
+                    <button onClick={toggleAddingUser} ><IconX /></button>
                 </div>
             ) : (
                 <div>
-                    <button onClick={toggleAddingUser}><UserPlus /></button>
+                    <button onClick={toggleAddingUser}><IconUserPlus /></button>
                 </div>
             )
         }

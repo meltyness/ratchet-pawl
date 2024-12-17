@@ -1,4 +1,4 @@
-import { Tool } from 'tabler-icons-react';
+import { IconTool } from '@tabler/icons-react';
 import { useState } from 'react';
 
 export default function PawlLogin({loginComplete}) {
@@ -27,7 +27,7 @@ export default function PawlLogin({loginComplete}) {
 
     return (
         <div>
-            <h1> <Tool /> Please login to Ratchet.  </h1>
+            <h1> <IconTool /> Please login to Ratchet.  </h1>
             <form onSubmit={handleSubmit}>
                 <div>
                     <label>Username:</label>

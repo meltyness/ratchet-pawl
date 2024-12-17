@@ -8,7 +8,7 @@ It uses [Rocket](https://rocket.rs) to produce some endpoints, which are enumera
 
 It uses [redb](https://redb.org) to provide persistence.
 
-Also shout-out to (tabler's react icons)[https://www.npmjs.com/package/@tabler/icons-react], very cool.
+Also shout-out to [tabler's react icons](https://www.npmjs.com/package/@tabler/icons-react), very cool.
 
 They allow definition of devices and users, as well as a backend API to be fetched by the ratchet TACACS daemon on launch.
 

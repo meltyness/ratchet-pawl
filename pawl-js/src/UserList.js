@@ -2,20 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { X, EditCircle, User, UserX, UserPlus, Users } from 'tabler-icons-react';
 import UserEditor from './UserEditor'; // Adjust the path as necessary
 
-export default function UserList () {
+export default function UserList ({authorizedRedirect}) {
     const [users, setUsers] = useState([]);
     const [editingUserId, setEditingUserId] = useState(null);
     const [addingUser, setAddingUser] = useState(false);
 
     const init = async() => {
         const response = await fetch('getusers');
-        const initUsers = await response.json();
-        initUsers.forEach((obj, index) => {
-            obj['id'] = index;
-        });
-        setUsers( users.concat(
-            initUsers
-        ));
+        if (response.status === 200) {
+            const initUsers = await response.json();
+            initUsers.forEach((obj, index) => {
+                obj['id'] = index;
+            });
+            setUsers( users.concat(
+                initUsers
+            ));
+        } else {
+            authorizedRedirect();
+        }
       };
 
     useEffect( () => { init() }, []);
@@ -84,7 +88,7 @@ export default function UserList () {
                             <User />
                             <span>{user.username}</span>
                             <button onClick={() => handleEdit(user.id)}><EditCircle size={16} /></button>
-                            <button onClick={() => handleDelete(user.id)}><UserX size={16}/></button>
+                            <button disabled={users.length <= 1} onClick={() => handleDelete(user.id)}><UserX size={16}/></button>
                         </div>
                     )}
                 </div>

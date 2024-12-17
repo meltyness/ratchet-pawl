@@ -18,6 +18,11 @@ export default function SideBar({pageSetter=() => {}}) {
                     User Editor
                 </label>
             </div>
+            <div className="sidebar-div">
+                <label className="sidebar-item" onClick={() => {setPage("pawl-login")}}>
+                    Login
+                </label>
+            </div>
         </div>
     );
 

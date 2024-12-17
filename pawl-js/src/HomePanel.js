@@ -3,6 +3,7 @@ import { useState } from 'react';
 import SideBar from "./SideBar"
 import UserList from "./UserList"
 import DeviceList from "./DeviceList"
+import PawlLogin from "./PawlLogin"
 import WelcomeLanding from "./WelcomeLanding"
 
 import { Home, Menu2, X } from 'tabler-icons-react';
@@ -15,6 +16,10 @@ export default function HomePanel(){
         setSelectedPage("welcome-page");
     };
 
+    const goLogin = () => {
+        setSelectedPage("pawl-login");
+    };
+
     const toggleSideBar = () => { 
         setIsSideBarVisible(!isSideBarVisible); 
     };
@@ -25,16 +30,21 @@ export default function HomePanel(){
     };
 
     return (
-        <div>
+        <div width="768">
+            
         <button onClick={goHome}>
             <Home />
         </button>
+
         <button onClick={toggleSideBar}> 
             {isSideBarVisible ? <X /> : <Menu2 />} 
         </button>
+
         {isSideBarVisible && <SideBar pageSetter={pageSelector}/>}
-        {selectedPage === "user-list" ? <UserList /> :
-         selectedPage === "device-list" ? <DeviceList /> : 
+
+        {selectedPage === "user-list" ? <UserList authorizedRedirect={goLogin}/> :
+         selectedPage === "device-list" ? <DeviceList authorizedRedirect={goLogin}/> : 
+         selectedPage === "pawl-login" ? <PawlLogin loginComplete={goHome}/> : 
          selectedPage === "welcome-page" ? <WelcomeLanding /> :
          <div>fatalError</div>
         }

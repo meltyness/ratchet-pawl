@@ -3,20 +3,24 @@ import { X, EditCircle, Network, PencilPlus, Trash, Router } from 'tabler-icons-
 
 import DeviceEditor from './DeviceEditor'; // Adjust the path as necessary
 
-export default function DeviceList () {
+export default function DeviceList ({authorizedRedirect}) {
     const [devices, setDevices] = useState([]);
     const [editingDeviceId, setEditingDeviceId] = useState(null);
     const [addingDevice, setAddingDevice] = useState(false);
 
     const init = async() => {
         const response = await fetch('getdevs');
-        const initDevs = await response.json();
-        initDevs.forEach((obj, index) => {
-            obj['id'] = index;
-        });
-        setDevices( devices.concat(
-            initDevs
-        ));
+        if (response.status === 200) {
+            const initDevs = await response.json();
+            initDevs.forEach((obj, index) => {
+                obj['id'] = index;
+            });
+            setDevices( devices.concat(
+                initDevs
+            ));
+        } else {
+            authorizedRedirect();
+        }
       };
 
     useEffect( () => { init() }, []);

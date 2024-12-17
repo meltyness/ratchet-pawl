@@ -1,4 +1,5 @@
-# Ratcht-pawl
+⚠ It's not production-ready ⚠
+# ratchet-pawl
 
 This is a frontend for configuring Ratchet.
 

@@ -39,13 +39,15 @@ It's not much to look at, very simple at this stage.
 ![image](https://github.com/user-attachments/assets/536b3a04-2b3c-4b2f-bd29-1f3d652fd89e)
 
 ## Building
-
+I suspect it only runs on Linux
 You need to have npm and cargo installed
 Suggestion: https://github.com/nvm-sh/nvm
 Suggestion: https://www.rust-lang.org/tools/install
 
-`git clone https://github.com/meltyness/ratchet-pawl`
+I think you can just do
 
-`cd ratchet-pawl/ && cargo build --release & cd ratchet-pawl/pawl-js && npm install && npm run build && cd ../ && cargo run --release`
+`cargo install --git https://github.com/meltyness/ratchet-pawl`
 
-... this is sort of a race condition, but if it doesn't work, just wait a minute and do `cargo run --release` again I suppose.
+`ratchet-pawl`
+
+Your shell will display some credentials to try it out.

@@ -22,7 +22,7 @@ fn main() {
             let output = Command::new("npm")
             .arg("ping")
             .output()
-            .expect("{style_bold}{color_bright_red}ratchet-pawl build error:{color_reset}{style_reset} Node Package Manager not found, or npm registry unreachable! Ensure the system is configured with npm.");
+            .expect(format!("{style_bold}{color_bright_red}ratchet-pawl build error:{color_reset}{style_reset} Node Package Manager not found, or npm registry unreachable! Ensure the system is configured with npm.").as_str());
         
             if !output.status.success() {
                 print_warning(format!("Unable to locate npm, cannot complete build."));

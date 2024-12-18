@@ -40,13 +40,12 @@ It's not much to look at, very simple at this stage.
 
 ## Building
 
-You need to have npm
+You need to have npm and cargo installed
 Suggestion: https://github.com/nvm-sh/nvm
-- Just folow the instructions and install node it's pretty easy.
+Suggestion: https://www.rust-lang.org/tools/install
 
 `git clone https://github.com/meltyness/ratchet-pawl`
 
-`cd ratchet/pawl-js & npm run build &`
+`cd ratchet-pawl/ && cargo build --release & cd ratchet-pawl/pawl-js && npm install && npm run build && cd../ && cargo run --release`
 
-`cd ../ & cargo run --release`
-
+... this is sort of a race condition, but if it doesn't work, just wait a minute and do `cargo run --release` again I suppose.

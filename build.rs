@@ -21,7 +21,7 @@ fn main() {
             let output = Command::new("npm")
             .arg("ping")
             .output()
-            .expect("Node Package Manager not found! Ensure the system is configured with npm.");
+            .expect("\x1b[93mratchet-pawl build error:\x1b[0mNode Package Manager not found! Ensure the system is configured with npm.");
         
             if !output.status.success() {
                 print_warning(format!("Unable to locate npm, cannot complete build."));

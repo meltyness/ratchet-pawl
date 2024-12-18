@@ -6,6 +6,9 @@ edition = "2021"
 [profile.dev]
 incremental = true
 
+[build-dependencies]
+inline_colorization = "0.1.6"
+
 [dependencies]
 rocket = {version="0.5.1", features=["json"]}
 serde = { version = "1.0.214", features = ["derive"] }

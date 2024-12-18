@@ -35,10 +35,9 @@ fn main() {
             let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
             d.push("pawl-js/");
             // Use the `cc` crate to build a C file and statically link it.
-            let output = Command::new("bash")
+            let output = Command::new("npm")
             .current_dir(d)
-            .arg("-c")
-            .arg(format!("npm install"))
+            .arg(format!("install"))
             .output()
             .expect("Node Package Manager error! Check system logs.");
         
@@ -73,10 +72,10 @@ fn main() {
     let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     d.push("pawl-js/");
     // Use the `cc` crate to build a C file and statically link it.
-    let output = Command::new("bash")
+    let output = Command::new("npm")
         .current_dir(d)
-        .arg("-c")
-        .arg(format!("npm run build"))
+        .arg("run")
+        .arg("build")
         .output()
         .expect("Node Package Manager error! Check system logs.");
 

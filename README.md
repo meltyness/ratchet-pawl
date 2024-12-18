@@ -46,8 +46,9 @@ Suggestion: https://www.rust-lang.org/tools/install
 
 I think you can just do
 
-`cargo install --git https://github.com/meltyness/ratchet-pawl`
-
-`ratchet-pawl`
+```bash
+cargo install --git https://github.com/meltyness/ratchet-pawl
+ratchet-pawl
+```
 
 Your shell will display some credentials to try it out.

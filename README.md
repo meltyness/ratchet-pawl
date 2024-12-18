@@ -41,10 +41,8 @@ It's not much to look at, very simple at this stage.
 ## Building
 I suspect it only runs on Linux
 You need to have npm and cargo installed
-Suggestion: https://github.com/nvm-sh/nvm
-Suggestion: https://www.rust-lang.org/tools/install
 
-I think you can just do
+just do:
 
 ```bash
 cargo install --git https://github.com/meltyness/ratchet-pawl

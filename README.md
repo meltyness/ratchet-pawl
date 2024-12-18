@@ -46,6 +46,6 @@ Suggestion: https://www.rust-lang.org/tools/install
 
 `git clone https://github.com/meltyness/ratchet-pawl`
 
-`cd ratchet-pawl/ && cargo build --release & cd ratchet-pawl/pawl-js && npm install && npm run build && cd../ && cargo run --release`
+`cd ratchet-pawl/ && cargo build --release & cd ratchet-pawl/pawl-js && npm install && npm run build && cd ../ && cargo run --release`
 
 ... this is sort of a race condition, but if it doesn't work, just wait a minute and do `cargo run --release` again I suppose.

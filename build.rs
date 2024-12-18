@@ -21,7 +21,7 @@ fn main() {
             let output = Command::new("npm")
             .arg("ping")
             .output()
-            .expect("cargo::warning=failed to execute process");
+            .expect("Node Package Manager not found! Ensure the system is configured with npm.");
         
             if !output.status.success() {
                 print_warning(format!("Unable to locate npm, cannot complete build."));
@@ -39,7 +39,7 @@ fn main() {
             .arg("-c")
             .arg(format!("npm install"))
             .output()
-            .expect("cargo::warning=failed to execute process");
+            .expect("Node Package Manager error! Check system logs.");
         
             if !output.status.success() {
                 print_warning(format!("NPM build failed."));
@@ -58,7 +58,7 @@ fn main() {
     let output = Command::new("npm")
         .arg("ping")
         .output()
-        .expect("cargo::warning=failed to execute process");
+        .expect("Node Package Manager not found! Ensure the system is configured with npm.");
 
     if !output.status.success() {
         print_warning(format!("Unable to locate npm, cannot complete build."));
@@ -77,7 +77,7 @@ fn main() {
         .arg("-c")
         .arg(format!("npm run build"))
         .output()
-        .expect("cargo::warning=failed to execute process");
+        .expect("Node Package Manager error! Check system logs.");
 
     if !output.status.success() {
         print_warning(format!("NPM build failed."));

@@ -128,6 +128,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "build-my-react-js"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee65ce9e8999207a06e346fae39a04849dd7e0d0d5034ad2b44ffa22813f496b"
+dependencies = [
+ "inline_colorization",
+]
+
+[[package]]
 name = "bytemuck"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -907,6 +916,7 @@ dependencies = [
 name = "ratchet-pawl"
 version = "0.1.0"
 dependencies = [
+ "build-my-react-js",
  "inline_colorization",
  "lazy_static",
  "pwhash",

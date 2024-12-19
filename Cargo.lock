@@ -129,8 +129,9 @@ dependencies = [
 
 [[package]]
 name = "build-my-react-js"
-version = "0.1.0"
-source = "git+https://github.com/meltyness/build-my-react-js#48465e4e93e548d1f00b6c9e1544849ff0ea938b"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee65ce9e8999207a06e346fae39a04849dd7e0d0d5034ad2b44ffa22813f496b"
 dependencies = [
  "inline_colorization",
 ]

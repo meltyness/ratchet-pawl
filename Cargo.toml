@@ -8,6 +8,7 @@ incremental = true
 
 [build-dependencies]
 inline_colorization = "0.1.6"
+build-my-react-js = { version = "0.1.0", git = "https://github.com/meltyness/build-my-react-js" }
 
 [dependencies]
 rocket = {version="0.5.1", features=["json"]}

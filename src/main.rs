@@ -10,8 +10,7 @@ extern crate rocket;
 use aes::Aes256;
 use fpe::ff1::{BinaryNumeralString, FF1};
 use rocket::{
-    form::Form, fs::{relative, FileServer}, http::{Cookie, CookieJar, SameSite, Status}, request::{self, FromRequest}, response::status, time::Duration, tokio::sync::Mutex, Build, Request, Rocket
-};
+    form::Form, fs::{relative, FileServer}, http::{Cookie, CookieJar, SameSite, Status}, request::{self, FromRequest}, response::status, time::Duration, tokio::sync::Mutex, Request};
 
 use rocket::serde::{json::Json, Serialize};
 
@@ -19,7 +18,9 @@ use lazy_static::lazy_static;
 use serde::Deserialize;
 use uuid::Uuid;
 use core::str;
-use std::{collections::HashMap, env, fs::File, marker::PhantomData, sync::Arc, time::{Instant, SystemTime}};
+use std::{collections::HashMap, env, marker::PhantomData, sync::Arc, time::Instant};
+
+use pwhash::bcrypt;
 
 use redb::{Database, ReadableTable, TableDefinition};
 
@@ -149,18 +150,23 @@ async fn rm_user(_admin: RatchetUser, username: Form<String>) -> status::Custom<
 async fn add_user(_admin: RatchetUser, newuser: Form<RatchetUserEntry>) -> status::Custom<&'static str> {
     let mut users = RATCHET_USERS.lock().await;
     if !users.contains_key(&newuser.username) {
-        let new_entry = RatchetUserEntry {
-            username: newuser.username.clone(),
-            passhash: newuser.passhash.clone(),
-        };
+        if let Ok(h) = bcrypt::hash(&newuser.passhash) {
+            let new_entry = RatchetUserEntry {
+                username: newuser.username.clone(),
+                passhash: h.clone(),
+            };
 
-        RATCHET_USERS_TABLE.write(&new_entry).await.expect("Database error");
+            RATCHET_USERS_TABLE.write(&new_entry).await.expect("Database error");
 
-        users.insert(
-            newuser.username.clone(), new_entry
-        );
-        
-        status::Custom(Status::Ok, "")
+            users.insert(
+                newuser.username.clone(), new_entry
+            );
+            
+            status::Custom(Status::Ok, "")
+        } else {
+            // TODO: This doesn't exactly mean this anymore
+            status::Custom(Status::Conflict, "")
+        }
     } else {
         status::Custom(Status::Conflict, "")
     }
@@ -172,10 +178,16 @@ async fn edit_user(_admin: RatchetUser, edited: Form<RatchetUserEntry>) -> statu
     if !users.contains_key(&edited.username) {
         status::Custom(Status::Gone, "")
     } else {
-        let user_update = edited.to_owned();
-        RATCHET_USERS_TABLE.write(&user_update).await.expect("Database error");
-        users.insert(user_update.username.clone(), user_update);
-        status::Custom(Status::Ok, "")
+        let mut user_update = edited.to_owned();
+        if let Ok(h) = bcrypt::hash(user_update.passhash)  {
+            user_update.passhash = h;
+            RATCHET_USERS_TABLE.write(&user_update).await.expect("Database error");
+            users.insert(user_update.username.clone(), user_update);
+            status::Custom(Status::Ok, "")
+        } else {
+            // TODO: This doesn't exactly mean this anymore
+            status::Custom(Status::Gone, "")
+        }
     }
 }
 
@@ -344,7 +356,7 @@ async fn initialize_first_user() -> Result<(), redb::Error> {
         let username = String::from("DefaultRatchetUser");
         let init_user = RatchetUserEntry {
             username: username,
-            passhash: pass,
+            passhash: bcrypt::hash(pass).expect("unable to initialize password"),
         };
         RATCHET_USERS_TABLE.write(&init_user).await?;
         users_init.insert(init_user.username.clone(), init_user);
@@ -366,11 +378,12 @@ async fn rtp_force_db_init() -> Result<(), redb::Error> {
     }
     write_txn.commit()?;
     
-    let mut selected_key = {|| {for (k, v) in env::vars() {
+    let selected_key = {|| {for (k, v) in env::vars() {
         // something like this appears to have ok support from systemd
         if k == "RATCHET_PAWL_MASKING_KEY" { return v; }
     } return "".to_string() }}();
 
+    if selected_key == "" { panic!("Please use the environment var, RATCHET_PAWL_MASKING_KEY, to specify a database encryption key."); }
     // if selected_key == "" {
     //     // ZERG RUSH!!
     //     let ke = File::open(THE_DATABASE)?;
@@ -383,7 +396,6 @@ async fn rtp_force_db_init() -> Result<(), redb::Error> {
     //     };
     // }
 
-    if selected_key == "" { panic!("Please use the environment variable to specify a database encryption key."); }
 
     unsafe { rtp_take_key(&selected_key); }
 
@@ -450,7 +462,7 @@ async fn rtp_import_database() -> Result<(), redb::Error> {
     let table_iter = table.iter()?;
     table_iter.for_each(|tup| {
         let v = tup.expect("dont get this interface");
-        let key = v.0.value();
+        //let key = v.0.value();
         let val = v.1.value();
         let val_pt = ff.decrypt(&[], &BinaryNumeralString::from_bytes_le(&val)).unwrap().to_bytes_le();
         let val_pt = str::from_utf8(&val_pt).unwrap();
@@ -508,9 +520,9 @@ struct RatchetLoginCreds {
 async fn try_login(cookies: &CookieJar<'_>, creds: Form<RatchetLoginCreds>) -> status::Custom<&'static str> {
     let users = RATCHET_USERS.lock().await;
     let mut cookie_store = RATCHET_COOKIES.lock().await;
-    if users.get(&creds.username)
-            .unwrap_or(&RatchetUserEntry{username: "".to_string(), passhash: "".to_string()}).passhash 
-        == creds.password {
+    if bcrypt::verify(&creds.password,
+        users.get(&creds.username)
+            .unwrap_or(&RatchetUserEntry{username: "".to_string(), passhash: "".to_string()}).passhash.as_str()) {
         let new_uuid = Uuid::new_v4();
         let cookie = Cookie::build(("X-Ratchet-Auth-Token", new_uuid.to_string()))
                             .path("/")

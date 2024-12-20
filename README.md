@@ -14,7 +14,6 @@ Also shout-out to [tabler's react icons](https://www.npmjs.com/package/@tabler/i
 They allow definition of devices and users, as well as a backend API to be fetched by the ratchet TACACS daemon on launch.
 
 ## Future plans / Roadmap
-- [ ] ❌ Data masking to prevent persisting keys in the clear.
 - [ ] ❌ Memory hardening, like the Daemon to prevent keys getting persisted improperly.
 - [ ] ❌ Bcrypt credential hashing to prevent persisting user passwords in the clear.
 - [ ] ❓ assess pre-hashing architecture, so that
@@ -34,6 +33,9 @@ They allow definition of devices and users, as well as a backend API to be fetch
 - [ ] Deployment architecture / Helm/Docker/K8s/etcd, Nullsoft, Rust-Crate, Snap, etc.
 - [ ] Distributed replication architecture / fault tolerance / clustering
 
+## Built
+- [x] ❌ Data masking to prevent persisting keys in the clear.
+
 ## Screenshots
 It's not much to look at, very simple at this stage.
 ![image](https://github.com/user-attachments/assets/536b3a04-2b3c-4b2f-bd29-1f3d652fd89e)
@@ -46,7 +48,7 @@ just do:
 
 ```bash
 cargo install --git https://github.com/meltyness/ratchet-pawl
-ratchet-pawl
+RATCHET_PAWL_MASKING_KEY="must_specify_a_key" ratchet-pawl
 ```
 
 Your shell will display some credentials to try it out.

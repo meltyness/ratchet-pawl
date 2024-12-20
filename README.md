@@ -16,7 +16,6 @@ They allow definition of devices and users, as well as a backend API to be fetch
 ## Future plans / Roadmap
 - [ ] ❌ Detailed input sanitization / validation
 - [ ] ❌ Memory hardening, like the Daemon to prevent keys getting persisted improperly.
-- [ ] ❌ Bcrypt credential hashing to prevent persisting user passwords in the clear.
 - [ ] ❓ assess pre-hashing architecture, so that
 - [ ] Secure initialization / signup invite link
 - [ ] Port from React to Dioxus
@@ -26,6 +25,7 @@ They allow definition of devices and users, as well as a backend API to be fetch
   - [ ] Pop-over notification
   - [ ] Center justification
   - [ ] Stateful updates using Websockets
+  - [ ] key entry, not *password* entry; password managers shouldn't offer
 - [ ] Trouble monitoring
 - [ ] Advanced security
   - [ ] Frontend lockdown / request filtering
@@ -36,6 +36,7 @@ They allow definition of devices and users, as well as a backend API to be fetch
 
 ## Built
 - [x] ❌ Data masking to prevent persisting keys in the clear.
+- [x] ❌ Bcrypt credential hashing to prevent persisting user passwords in the clear.
 
 ## Screenshots
 It's not much to look at, very simple at this stage.

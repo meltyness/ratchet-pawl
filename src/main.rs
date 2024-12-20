@@ -7,6 +7,8 @@
 #[macro_use]
 extern crate rocket;
 
+use aes::Aes256;
+use fpe::ff1::{BinaryNumeralString, FF1};
 use rocket::{
     form::Form, fs::{relative, FileServer}, http::{Cookie, CookieJar, SameSite, Status}, request::{self, FromRequest}, response::status, time::Duration, tokio::sync::Mutex, Build, Request, Rocket
 };
@@ -16,7 +18,8 @@ use rocket::serde::{json::Json, Serialize};
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use uuid::Uuid;
-use std::{collections::HashMap, marker::PhantomData, time::Instant};
+use core::str;
+use std::{collections::HashMap, env, fs::File, marker::PhantomData, sync::Arc, time::{Instant, SystemTime}};
 
 use redb::{Database, ReadableTable, TableDefinition};
 
@@ -29,16 +32,19 @@ K: redb::Key + 'static,
 V: redb::Value + 'static,
 T: Serialize + Deserialize<'a> + RatchetKeyed;
 
-impl<'a, T> ReadWriteTable<'a, &'a str, &'a str, T> where T: Serialize + Deserialize<'a> + RatchetKeyed {
+impl<'a, T> ReadWriteTable<'a, &'a str, Vec<u8>, T> where T: Serialize + Deserialize<'a> + RatchetKeyed {
     pub async fn write(&'static self, item: &T) -> Result<(), redb::Error> {
         let db = Database::create(THE_DATABASE)?;
+        let key: &[u8; 32]  = *PERM_DB_KEY.clone();
+        let ff = FF1::<Aes256>::new(key, 2).unwrap();
         let write_txn = db.begin_write()?;
         {
             let mut table = write_txn.open_table(self.unwrap())?;
             let ser = serde_json::to_string(&item).unwrap();
+            let ct = ff.encrypt(&[], &BinaryNumeralString::from_bytes_le(&ser.as_bytes())).unwrap();
             let my_key = item.into_key();
-            
-            table.insert(my_key, ser.as_str())?;
+            let bytes = ct.to_bytes_le();
+            table.insert(my_key, bytes.clone())?;
         }
         write_txn.commit()?;
         Ok(())
@@ -57,7 +63,7 @@ impl<'a, T> ReadWriteTable<'a, &'a str, &'a str, T> where T: Serialize + Deseria
         Ok(())
     } 
 
-    pub fn unwrap(&self) -> TableDefinition<'static, &str, &str> {
+    pub fn unwrap(&self) -> TableDefinition<'static, &str, Vec<u8>> {
         self.0.to_owned()
     }
 }
@@ -66,14 +72,15 @@ trait RatchetKeyed {
     fn into_key<'k>(&self) -> &str;
 }
 
-// TODO: What happens if we modify the user format by adding a field do we have to make it option type?
-const RATCHET_USERS_TABLE: ReadWriteTable<&str, &str, RatchetUserEntry> = 
-    ReadWriteTable::<&str, &str, RatchetUserEntry>(TableDefinition::new("ratchet_users"), PhantomData);
-const RATCHET_DEVS_TABLE: ReadWriteTable<&str, &str, RatchetDevEntry> = 
-    ReadWriteTable::<&str, &str, RatchetDevEntry>(TableDefinition::new("ratchet_devs"), PhantomData);
+static mut DB_KEY: [u8; 32] = [0; 32];
 
-const RATCHET_APIKEY_TABLE: ReadWriteTable<&str, &str, RatchetApiKey> =
-    ReadWriteTable::<&str, &str, RatchetApiKey>(TableDefinition::new("ratchet_api_keys"), PhantomData);
+// TODO: What happens if we modify the user format by adding a field do we have to make it option type?
+const RATCHET_USERS_TABLE: ReadWriteTable<&str, Vec<u8>, RatchetUserEntry> = 
+    ReadWriteTable::<&str, Vec<u8>, RatchetUserEntry>(TableDefinition::new("ratchet_users"), PhantomData);
+const RATCHET_DEVS_TABLE: ReadWriteTable<&str, Vec<u8>, RatchetDevEntry> = 
+    ReadWriteTable::<&str, Vec<u8>, RatchetDevEntry>(TableDefinition::new("ratchet_devs"), PhantomData);
+const RATCHET_APIKEY_TABLE: ReadWriteTable<&str, Vec<u8>, RatchetApiKey> =
+    ReadWriteTable::<&str, Vec<u8>, RatchetApiKey>(TableDefinition::new("ratchet_api_keys"), PhantomData);
 
 lazy_static! {
     static ref RATCHET_APIKEYS: Mutex<HashMap<String, RatchetApiKey>> = {
@@ -92,6 +99,26 @@ lazy_static! {
         let m = HashMap::new();
         Mutex::new(m)
     };
+    static ref PERM_DB_KEY: Arc<&'static [u8; 32]> = {
+        // SAFETY: DB_KEY must not be mutated after init, see rtp_take_key
+        // if anyone else touches DB_KEY and not PERM_DB_KEY, slap them.
+        unsafe { Arc::new(&DB_KEY) }
+    };
+}
+/// SAFETY: This must only be called once prior to operation of any 
+/// accessors or users of the Arc<PERM_DB_KEY>.
+/// 
+/// 😭 i dont want to make good abstractions right now!!
+/// 
+pub unsafe fn rtp_take_key (key: &String) {
+    // SAFETY: Nothing else writes the DB_KEY.
+    unsafe {
+        DB_KEY.iter_mut()
+            .enumerate()
+            .for_each(|(i,k)| *k = *key.as_bytes()
+                                                                .get(i)
+                                                                .unwrap_or(&0));
+    }
 }
 
 #[derive(Clone, FromForm, Debug, Serialize, Deserialize)]
@@ -286,6 +313,7 @@ fn conflict(_req: &Request) -> String {
 
 #[launch]
 async fn rocket() -> _ {
+    rtp_force_db_init().await.expect("Unable to init database");
     rtp_import_database().await.expect("Error importing database");
     
     initialize_first_user().await.expect("Error initializing first user");
@@ -324,18 +352,63 @@ async fn initialize_first_user() -> Result<(), redb::Error> {
     Ok(())
 }
 
-async fn rtp_import_database() -> Result<(), redb::Error> {
+
+async fn rtp_force_db_init() -> Result<(), redb::Error> {
     let db = Database::create(THE_DATABASE)?;
-    let mut users_init = RATCHET_USERS.lock().await;
-    let mut devs_init = RATCHET_DEVICES.lock().await;
-    let mut api_init = RATCHET_APIKEYS.lock().await;
+
     let write_txn = db.begin_write()?;
     {
+        // write initializes tables, tables must be written before they are initialized
         write_txn.open_table(RATCHET_USERS_TABLE.unwrap())?;
         write_txn.open_table(RATCHET_DEVS_TABLE.unwrap())?;
         write_txn.open_table(RATCHET_APIKEY_TABLE.unwrap())?;
+        // reading an empty table is a panic.
     }
     write_txn.commit()?;
+    
+    let mut selected_key = {|| {for (k, v) in env::vars() {
+        // something like this appears to have ok support from systemd
+        if k == "RATCHET_PAWL_MASKING_KEY" { return v; }
+    } return "".to_string() }}();
+
+    // if selected_key == "" {
+    //     // ZERG RUSH!!
+    //     let ke = File::open(THE_DATABASE)?;
+    //     let ke = ke.metadata()?;
+    //     let ke = ke.created()?;
+    //     let ke = ke.duration_since(SystemTime::UNIX_EPOCH);
+    //     selected_key = match ke {
+    //         Ok(k) => k.as_secs().to_string(),
+    //         Err(_) => panic!("Need a shadowing key."),
+    //     };
+    // }
+
+    if selected_key == "" { panic!("Please use the environment variable to specify a database encryption key."); }
+
+    unsafe { rtp_take_key(&selected_key); }
+
+    Ok(())
+}
+
+
+async fn rtp_import_database() -> Result<(), redb::Error> {
+    let db = Database::create(THE_DATABASE)?;
+    let mut users_init = RATCHET_USERS.lock().await;
+    let mut devs_init: rocket::tokio::sync::MutexGuard<'_, HashMap<String, RatchetDevEntry>> = RATCHET_DEVICES.lock().await;
+    let mut api_init = RATCHET_APIKEYS.lock().await;
+    let write_txn = db.begin_write()?;
+    {
+        // write initializes tables, tables must be written before they are initialized
+        write_txn.open_table(RATCHET_USERS_TABLE.unwrap())?;
+        write_txn.open_table(RATCHET_DEVS_TABLE.unwrap())?;
+        write_txn.open_table(RATCHET_APIKEY_TABLE.unwrap())?;
+        // reading an empty table is a panic.
+    }
+    write_txn.commit()?;
+
+    let key: &[u8; 32]  = *PERM_DB_KEY.clone();
+    let ff = FF1::<Aes256>::new(key, 2).unwrap();
+
     let read_txn = db.begin_read()?;
     let table = read_txn.open_table(RATCHET_USERS_TABLE.unwrap())?;
 
@@ -343,25 +416,32 @@ async fn rtp_import_database() -> Result<(), redb::Error> {
     table_iter.for_each(|tup| {
         let v = tup.expect("dont get this interface");
         let key = v.0.value();
-        let val = v.1.value();
+        let val = v.1.value(); // these are shadowed already and not directly recoverable. but we're just gonna encrypt it anyway.
+        let val_pt = ff.decrypt(&[], &BinaryNumeralString::from_bytes_le(&val)).unwrap().to_bytes_le();
+        let val_pt = str::from_utf8(&val_pt).unwrap();
         //println!("Processing {:#?}", key);
-        let new_user: RatchetUserEntry = serde_json::from_str(&val).unwrap();
+        let new_user: RatchetUserEntry = serde_json::from_str(val_pt).unwrap();
         //println!("Got {:#?}", new_user);
         users_init.insert(key.to_string(), new_user);
     });
 
+    let key: &[u8; 32]  = *PERM_DB_KEY.clone();
+    let ff = FF1::<Aes256>::new(key, 2).unwrap();
+
     let read_txn = db.begin_read()?;
     let table = read_txn.open_table(RATCHET_DEVS_TABLE.unwrap())?;
-
+ 
     let table_iter = table.iter()?;
     table_iter.for_each(|tup| {
         let v = tup.expect("dont get this interface");
-        let key = v.0.value();
+        let record_key = v.0.value();
         let val = v.1.value();
+        let val_pt = ff.decrypt(&[], &BinaryNumeralString::from_bytes_le(&val)).unwrap().to_bytes_le();
+        let val_pt = str::from_utf8(&val_pt).unwrap();
         //println!("Processing {:#?}", key);
-        let new_dev: RatchetDevEntry = serde_json::from_str(&val).unwrap();
+        let new_dev: RatchetDevEntry = serde_json::from_str(&val_pt).unwrap();
         //println!("Got {:#?}", new_dev);
-        devs_init.insert(key.to_string(), new_dev);
+        devs_init.insert(record_key.to_string(), new_dev);
     });
 
     let read_txn = db.begin_read()?;
@@ -372,10 +452,12 @@ async fn rtp_import_database() -> Result<(), redb::Error> {
         let v = tup.expect("dont get this interface");
         let key = v.0.value();
         let val = v.1.value();
+        let val_pt = ff.decrypt(&[], &BinaryNumeralString::from_bytes_le(&val)).unwrap().to_bytes_le();
+        let val_pt = str::from_utf8(&val_pt).unwrap();
         //println!("Processing {:#?}", key);
-        let new_key: RatchetApiKey = serde_json::from_str(&val).unwrap();
+        let new_key: RatchetApiKey = serde_json::from_str(val_pt).unwrap();
         //println!("Got {:#?}", new_key);
-        api_init.insert(key.to_string(), new_key);
+        api_init.insert(new_key.api_key.clone(), new_key); // this awkward bit is because write is genuinely key-value
     });
 
     Ok(())
@@ -451,7 +533,7 @@ struct RatchetApiKey {
 
 impl RatchetKeyed for RatchetApiKey{
     fn into_key(&self) -> &str {
-        self.api_key.as_str()
+        "-" // don't write the key in the clear
     }
 }
 

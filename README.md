@@ -1,5 +1,5 @@
-> [!CAUTION]
-> This is unstable and missing key security features, use is **strongly** discouraged!
+> [!WARNING]
+> This is unstable and missing some security features, use is discouraged!
 # ratchet-pawl
 
 This is a minimalist frontend for configuring Ratchet. It is draft-phase, and absolutely needs a bit more polish.

@@ -14,6 +14,7 @@ Also shout-out to [tabler's react icons](https://www.npmjs.com/package/@tabler/i
 They allow definition of devices and users, as well as a backend API to be fetched by the ratchet TACACS daemon on launch.
 
 ## Future plans / Roadmap
+- [ ] ❌ Detailed input sanitization / validation
 - [ ] ❌ Memory hardening, like the Daemon to prevent keys getting persisted improperly.
 - [ ] ❌ Bcrypt credential hashing to prevent persisting user passwords in the clear.
 - [ ] ❓ assess pre-hashing architecture, so that

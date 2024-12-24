@@ -18,6 +18,7 @@ They allow definition of devices and users, as well as a backend API to be fetch
 - [ ] ❌ Memory hardening, like the Daemon to prevent keys getting persisted improperly.
 - [ ] ❓ assess pre-hashing architecture, so that
 - [ ] Secure initialization / signup invite link
+- [ ] safer cookie disposal
 - [ ] Port from React to Dioxus
 - [ ] Sand down the edges:
   - [ ] Ratchet -> ratchet

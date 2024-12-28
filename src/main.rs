@@ -363,7 +363,7 @@ async fn rocket() -> _ {
 
     rocket::build()
         .mount("/", rocket::routes![try_login])
-        .mount("/", rocket::routes![api_dump_devs, api_dump_users])
+        .mount("/", rocket::routes![api_dump_devs, api_dump_users, api_long_poll])
         .mount("/", rocket::routes![rm_user, edit_user, add_user, get_users])
         .mount("/", rocket::routes![rm_dev, edit_dev, add_dev, get_devs])
         .mount("/", FileServer::from(relative!("pawl-js/build/")))

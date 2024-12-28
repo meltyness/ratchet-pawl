@@ -469,8 +469,8 @@ async fn rtp_import_database() -> Result<(), redb::Error> {
         //println!("Processing {:#?}", key);
         let new_key: RatchetApiKey = serde_json::from_str(val_pt).unwrap();
         //println!("Got {:#?}", new_key);
+        println!("Api-Key: {}", new_key.api_key.clone());
         api_init.insert(new_key.api_key.clone(), new_key); // this awkward bit is because write is genuinely key-value
-        println!("Api-Key: {}", new_key.api_key);
     });
 
     Ok(())

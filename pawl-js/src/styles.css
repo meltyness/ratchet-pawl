@@ -49,6 +49,8 @@
   .sidebar-container { 
     box-shadow: rgba(3, 102, 214, 0.3) 0px 0px 0px 3px;
     width: fit-content;
+    position: absolute;
+    background-color: white;
   }
 
   .sidebar-div {
@@ -72,37 +74,15 @@
     margin: 20px;
     padding: 0;
   }
-  
-  .square {
-    background: #fff;
-    border: 1px solid #999;
+
+  .editor-fields {
+    display: block;
     float: left;
-    font-size: 24px;
-    font-weight: bold;
-    line-height: 34px;
-    height: 34px;
-    margin-right: -1px;
-    margin-top: -1px;
-    padding: 0;
-    text-align: center;
-    width: 34px;
+    width: 84px;
   }
-  
-  .board-row:after {
-    clear: both;
-    content: '';
-    display: table;
+
+  .dev-editor-fields {
+    display: block;
+    float: left;
+    width: 118px;
   }
-  
-  .status {
-    margin-bottom: 10px;
-  }
-  .game {
-    display: flex;
-    flex-direction: row;
-  }
-  
-  .game-info {
-    margin-left: 20px;
-  }
-  

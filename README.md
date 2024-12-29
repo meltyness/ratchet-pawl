@@ -32,10 +32,11 @@ They allow definition of devices and users, as well as a backend API to be fetch
   - [ ] Frontend lockdown / request filtering
   - [ ] This is common in this sort of application.
   - [ ] In the same vein, TLS certificate management for the webserver (or appropriate solution)
-- [ ] Deployment architecture / Helm/Docker/K8s/etcd, Nullsoft, Rust-Crate, Snap, etc.
 - [ ] Distributed replication architecture / fault tolerance / clustering
 
 ## Built
+
+- [x] Deployment architecture / Helm/Docker/K8s/etcd, Nullsoft, Rust-Crate, Snap, etc.
 - [x] ❌ Data masking to prevent persisting keys in the clear.
 - [x] ❌ Bcrypt credential hashing to prevent persisting user passwords in the clear.
 

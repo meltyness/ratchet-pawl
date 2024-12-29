@@ -10,7 +10,7 @@ extern crate rocket;
 use aes::Aes256;
 use fpe::ff1::{BinaryNumeralString, FF1};
 use rocket::{
-    form::Form, fs::{relative, FileServer}, http::{Cookie, CookieJar, SameSite, Status}, request::{self, FromRequest}, response::status, time::Duration, tokio::sync::Mutex, Request};
+    form::Form, fs::{relative, FileServer}, http::{Cookie, CookieJar, SameSite, Status}, request::{self, FromRequest}, response::status, time::Duration, tokio::sync::Mutex, tokio::sync::oneshot, tokio::sync::oneshot::Sender, tokio::sync::oneshot::Receiver, Request};
 
 use rocket::serde::{json::Json, Serialize};
 
@@ -100,6 +100,10 @@ lazy_static! {
         let m = HashMap::new();
         Mutex::new(m)
     };
+    static ref RATCHET_POLL_PINS: Mutex<Vec<Sender<bool>>> = {
+        let p = Vec::new();
+        Mutex::new(p)
+    };
     static ref PERM_DB_KEY: Arc<&'static [u8; 32]> = {
         // SAFETY: DB_KEY must not be mutated after init, see rtp_take_key
         // if anyone else touches DB_KEY and not PERM_DB_KEY, slap them.
@@ -134,12 +138,20 @@ impl RatchetKeyed for RatchetUserEntry{
     }
 }
 
+async fn rtp_notify_pollers() {
+    let mut pins = RATCHET_POLL_PINS.lock().await;
+    while let Some(pin) = pins.pop() {
+        pin.send(true);
+    }
+}
+
 #[post("/rmuser", format = "multipart/form-data", data = "<username>")]
 async fn rm_user(_admin: RatchetUser, username: Form<String>) -> status::Custom<&'static str> {
     let mut users = RATCHET_USERS.lock().await;
     match users.remove(&*username) {
         Some(user) => {
             RATCHET_USERS_TABLE.rm(&user).await.expect("Database error");
+            rtp_notify_pollers().await;
             status::Custom(Status::Ok, "")
         },
         None => status::Custom(Status::Gone, ""),
@@ -161,7 +173,7 @@ async fn add_user(_admin: RatchetUser, newuser: Form<RatchetUserEntry>) -> statu
             users.insert(
                 newuser.username.clone(), new_entry
             );
-            
+            rtp_notify_pollers().await;
             status::Custom(Status::Ok, "")
         } else {
             // TODO: This doesn't exactly mean this anymore
@@ -183,6 +195,7 @@ async fn edit_user(_admin: RatchetUser, edited: Form<RatchetUserEntry>) -> statu
             user_update.passhash = h;
             RATCHET_USERS_TABLE.write(&user_update).await.expect("Database error");
             users.insert(user_update.username.clone(), user_update);
+            rtp_notify_pollers().await;
             status::Custom(Status::Ok, "")
         } else {
             // TODO: This doesn't exactly mean this anymore
@@ -227,6 +240,7 @@ async fn rm_dev(_admin: RatchetUser, network_id: Form<String>) -> status::Custom
     match devs.remove(&*network_id) {
         Some(dev) => {
             RATCHET_DEVS_TABLE.rm(&dev).await.expect("Database error");
+            rtp_notify_pollers().await;
             status::Custom(Status::Ok, "")
         },
         None => status::Custom(Status::Gone, ""),
@@ -241,6 +255,7 @@ async fn add_dev(_admin: RatchetUser, newdev: Form<RatchetDevEntry>) -> status::
         let new_dev = newdev.to_owned();
         RATCHET_DEVS_TABLE.write(&new_dev).await.expect("Database error");
         devs.insert(new_dev.network_id.clone(), new_dev);
+        rtp_notify_pollers().await;
         status::Custom(Status::Ok, "")
     } else {
         status::Custom(Status::Conflict, "")
@@ -256,6 +271,7 @@ async fn edit_dev(_admin: RatchetUser, edited: Form<RatchetDevEntry>) -> status:
         let dev_update = edited.to_owned();
         RATCHET_DEVS_TABLE.write(&dev_update).await.expect("Database error");
         devs.insert(dev_update.network_id.clone(), dev_update);
+        rtp_notify_pollers().await;
         status::Custom(Status::Ok, "")
     }
 }
@@ -306,6 +322,20 @@ async fn api_dump_devs(_valid: RatchetApiKey) -> String {
         }
     )
 }
+
+#[get("/api/longpoll")]
+async fn api_long_poll(_valid: RatchetApiKey) -> String {
+    let (tx, rx) = oneshot::channel();
+    {
+        let mut pins = RATCHET_POLL_PINS.lock().await;
+        pins.push(tx);
+    }
+    match rx.await {
+        Ok(v) => String::from("Update"),
+        Err(_) => String::from(""),
+    }
+}
+
 #[catch(401)]
 fn unauth(_req: &Request) -> String {
     format!("Unauthorized")
@@ -333,7 +363,7 @@ async fn rocket() -> _ {
 
     rocket::build()
         .mount("/", rocket::routes![try_login])
-        .mount("/", rocket::routes![api_dump_devs, api_dump_users])
+        .mount("/", rocket::routes![api_dump_devs, api_dump_users, api_long_poll])
         .mount("/", rocket::routes![rm_user, edit_user, add_user, get_users])
         .mount("/", rocket::routes![rm_dev, edit_dev, add_dev, get_devs])
         .mount("/", FileServer::from(relative!("pawl-js/build/")))

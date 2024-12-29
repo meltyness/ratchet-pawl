@@ -44,6 +44,10 @@ export default function UserList ({authorizedRedirect}) {
         }
     };
 
+    const handleFakeDelete = async(id) => {
+        setUsers(users.map(usr => {if (usr.id === id) {usr.deleting = true} return usr;}));
+    };
+
     const handleEdit = (id) => {
         setEditingUserId(id);
     };
@@ -72,7 +76,6 @@ export default function UserList ({authorizedRedirect}) {
         <div>
             <h1><IconUsers /> Add or Edit Users!</h1>
             <p>These are users authorized to access network system consoles.</p>
-            <p> ⚡⚡ There's no confirmation dialog on removal, it just removes them! ⚡⚡</p>
             {users.length == 0 ? 
                <h3>Define some users to get started!</h3> : <nbsp></nbsp>
             }
@@ -88,7 +91,9 @@ export default function UserList ({authorizedRedirect}) {
                             <IconUser />
                             <span>{user.username}</span>
                             <button onClick={() => handleEdit(user.id)}><IconEditCircle size={16} /></button>
-                            <button disabled={users.length <= 1} onClick={() => handleDelete(user.id)}><IconUserX size={16}/></button>
+                            { user.deleting ? (<button disabled={users.length <= 1} onClick={() => handleDelete(user.id)}>⚡<IconUserX size={16}/></button>) :
+                                              (<button disabled={users.length <= 1} onClick={() => handleFakeDelete(user.id)}><IconUserX size={16}/></button>)
+                            }
                         </div>
                     )}
                 </div>

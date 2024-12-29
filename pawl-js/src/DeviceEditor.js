@@ -46,7 +46,7 @@ export default function DeviceEditor({ initialNetworkId = '', editingNetworkId =
             {editingNetworkId ? ( <h2>Edit System</h2>) : (<h2>Add System</h2>)}
             <form onSubmit={handleSubmit}>
                 <div>
-                    <label>Network ID:</label>
+                    <label className="dev-editor-fields">Network ID:</label>
                     <input
                         type="text"
                         autocomplete="networkid"
@@ -57,7 +57,7 @@ export default function DeviceEditor({ initialNetworkId = '', editingNetworkId =
                     />
                 </div>
                 <div>
-                    <label>TACACS+ Key:</label>
+                    <label className="dev-editor-fields">TACACS+ Key:</label>
                     <input
                         type="password"
                         autocomplete="new-password"
@@ -67,7 +67,7 @@ export default function DeviceEditor({ initialNetworkId = '', editingNetworkId =
                     />
                 </div>
                 <div>
-                    <label>Confirm Key:</label>
+                    <label className="dev-editor-fields">Confirm:</label>
                     <input
                         type="password"
                         autocomplete="new-password"

@@ -46,6 +46,10 @@ export default function DeviceList ({authorizedRedirect}) {
         }
     };
 
+    const handleFakeDelete = async(id) => {
+        setDevices(devices.map(dev => {if (dev.id === id) {dev.deleting = true} return dev;}));
+    };
+
     const handleEdit = (id) => {
         setEditingDeviceId(id);
     };
@@ -73,7 +77,6 @@ export default function DeviceList ({authorizedRedirect}) {
         <div>
             <h1><IconNetwork /> Add or Edit Trusted Systems!</h1>
             <p> These are network machines that can talk to ratchet, and check passwords. </p>
-            <p> ⚡⚡ There's no confirmation dialog on deletion, it just deletes them! ⚡⚡</p>
             {devices.length == 0 ? 
                <h3>Define some systems to get started!</h3> : <nbsp></nbsp>
             }
@@ -89,7 +92,9 @@ export default function DeviceList ({authorizedRedirect}) {
                             <IconRouter />
                             <span>{dev.network_id}</span>
                             <button onClick={() => handleEdit(dev.id)}><IconEditCircle size={16}/></button>
-                            <button onClick={() => handleDelete(dev.id)}><IconTrash size={16}/></button>
+                            { dev.deleting ? (<button onClick={() => handleDelete(dev.id)}>⚡<IconTrash size={16}/></button>) :
+                                             (<button onClick={() => handleFakeDelete(dev.id)}><IconTrash size={16}/></button>)
+                            }
                         </div>
                     )}
                 </div>

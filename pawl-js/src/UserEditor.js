@@ -48,7 +48,7 @@ export default function UserEditor({ initialUsername = '',
             {lockUsername ? ( <h2>Edit User</h2>) : (<h2>Add User</h2>)}
             <form onSubmit={handleSubmit}>
                 <div>
-                    <label>Username:</label>
+                    <label className="editor-fields">Username:</label>
                     <input
                         type="text"
                         autocomplete="username"
@@ -59,7 +59,7 @@ export default function UserEditor({ initialUsername = '',
                     />
                 </div>
                 <div>
-                    <label>Password:</label>
+                    <label className="editor-fields">Password:</label>
                     <input
                         type="password"
                         autocomplete="new-password"
@@ -69,7 +69,7 @@ export default function UserEditor({ initialUsername = '',
                     />
                 </div>
                 <div>
-                    <label>Confirm Password:</label>
+                    <label className="editor-fields">Confirm:</label>
                     <input
                         type="password"
                         autocomplete="new-password"

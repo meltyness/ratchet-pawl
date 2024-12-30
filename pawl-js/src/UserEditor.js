@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { IconX } from '@tabler/icons-react';
 
 export default function UserEditor({ initialUsername = '', 
                                      lockUsername = false, 
@@ -36,6 +37,10 @@ export default function UserEditor({ initialUsername = '',
         }
     };
 
+    const handleCancel = () => {
+        addComplete();
+    };
+
     let actionName;
     if(lockUsername) {
         actionName = "Save Changes";
@@ -44,7 +49,7 @@ export default function UserEditor({ initialUsername = '',
     }
 
     return (
-        <div>
+        <div className="ratchet-editor-popover">
             {lockUsername ? ( <h2>Edit User</h2>) : (<h2>Add User</h2>)}
             <form onSubmit={handleSubmit}>
                 <div>
@@ -81,6 +86,7 @@ export default function UserEditor({ initialUsername = '',
                 {error && <p style={{ color: 'red' }}>{error}</p>}
                 <button type="submit">{actionName}</button>
             </form>
+            <button onClick={() => handleCancel()}><IconX /></button>
         </div>
     );
 }

@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { IconX, IconEditCircle, IconNetwork, IconPencilPlus, IconTrash, IconRouter } from '@tabler/icons-react';
+import { IconLoader, IconX, IconEditCircle, IconNetwork, IconPencilPlus, IconTrash, IconRouter } from '@tabler/icons-react';
 
 import DeviceEditor from './DeviceEditor'; // Adjust the path as necessary
 
 export default function DeviceList ({authorizedRedirect}) {
     const [devices, setDevices] = useState([]);
+    const [devsLoaded, setDevsLoaded] = useState(false);
     const [editingDeviceId, setEditingDeviceId] = useState(null);
     const [addingDevice, setAddingDevice] = useState(false);
 
     const init = async() => {
+        setDevsLoaded(false);
         const response = await fetch('getdevs');
+        setDevsLoaded(true);
         if (response.status === 200) {
             const initDevs = await response.json();
             initDevs.forEach((obj, index) => {
@@ -52,6 +55,9 @@ export default function DeviceList ({authorizedRedirect}) {
 
     const handleEdit = (id) => {
         setEditingDeviceId(id);
+        if (addingDevice) {      // Adding and editing are mutually exclusive
+            toggleAddingDevice();
+        }
     };
 
     const handleCancelEdit = () => {
@@ -59,8 +65,13 @@ export default function DeviceList ({authorizedRedirect}) {
     };
 
     function createdDevice(new_network) {
-        setDevices(addDevice(devices, { network_id: new_network}));
-        toggleAddingDevice();
+        if(new_network) {
+            setDevices(addDevice(devices, { network_id: new_network}));
+            toggleAddingDevice();
+        } else {
+            // Cancellation from within edit workflow...?
+            toggleAddingDevice();
+        }
     }
 
     function addDevice(devices, newDev) {
@@ -70,27 +81,31 @@ export default function DeviceList ({authorizedRedirect}) {
     }
 
     function toggleAddingDevice() {
+        if (!addingDevice) {      // Adding and editing are mutually exclusive
+            handleCancelEdit();
+        }
         setAddingDevice(!addingDevice);
     }
     // TODO: Make this a routing table.
     return (
-        <div>
+        <div className="ratchet-editable-items-list">
             <h1><IconNetwork /> Add or Edit Trusted Systems!</h1>
             <p> These are network machines that can talk to ratchet, and check passwords. </p>
-            {devices.length == 0 ? 
-               <h3>Define some systems to get started!</h3> : <nbsp></nbsp>
+            {devices.length == 0  && devsLoaded ? 
+               <h3>Define some systems to get started!</h3> : !devsLoaded &&  <IconLoader />
             }
             {devices.map(dev => (
                 <div key={dev.id}>
                     {editingDeviceId === dev.id ? (
                         <div>
                             <DeviceEditor initialNetworkId={dev.network_id} editingNetworkId={true} addComplete={handleCancelEdit}/>
-                            <button onClick={() => handleCancelEdit()}><IconX /></button>
+                            <IconRouter />
+                            <span className="ratchet-listed-object">{dev.network_id}</span>
                         </div>
                     ) : (
                         <div>
                             <IconRouter />
-                            <span>{dev.network_id}</span>
+                            <span className="ratchet-listed-object">{dev.network_id}</span>
                             <button onClick={() => handleEdit(dev.id)}><IconEditCircle size={16}/></button>
                             { dev.deleting ? (<button onClick={() => handleDelete(dev.id)}>⚡<IconTrash size={16}/></button>) :
                                              (<button onClick={() => handleFakeDelete(dev.id)}><IconTrash size={16}/></button>)

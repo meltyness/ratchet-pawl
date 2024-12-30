@@ -16,7 +16,9 @@ export default function HomePanel(){
         setSelectedPage("welcome-page");
     };
 
-    const goLogin = () => {
+    const goLogin = async() => {
+        // In this case, we're not authorized, wipe cached cookie.
+        await cookieStore.delete("X-Ratchet-Auth-Token")
         setSelectedPage("pawl-login");
     };
 
@@ -30,7 +32,7 @@ export default function HomePanel(){
     };
 
     return (
-        <div width="768">
+        <div>
             
         <button onClick={goHome}>
             <IconHome />

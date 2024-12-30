@@ -30,7 +30,7 @@ export default function PawlLogin({loginComplete}) {
             <h1> <IconTool /> Please login to Ratchet.  </h1>
             <form onSubmit={handleSubmit}>
                 <div>
-                    <label>Username:</label>
+                    <label className="login-fields">Username:</label>
                     <input
                         type="text"
                         autocomplete="username"
@@ -40,7 +40,7 @@ export default function PawlLogin({loginComplete}) {
                     />
                 </div>
                 <div>
-                    <label>Password:</label>
+                    <label className="login-fields">Password:</label>
                     <input
                         type="password"
                         autocomplete="password"

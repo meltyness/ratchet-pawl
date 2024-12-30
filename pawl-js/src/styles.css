@@ -1,41 +1,50 @@
 * {
     box-sizing: border-box;
+    font-family: system-ui;
   }
 
   body {
-    font-family: sans-serif;
-    margin: 20px;
+    margin: 8px;
     padding: 0;
   }
   
+  button {
+    border-radius: 0.5rem;
+    transition-duration: 0.25s;
+    margin: 2px;
+    font-size: 19px;
+  }
+
+  button:hover {
+    border-radius: 0.25rem;
+    background-color: rgba(3, 102, 214, 0.3);
+    color: white;
+  }
+
+  .ratchet-listed-object {
+    margin-left: 8px;
+    margin-right: 8px;
+  }
+
   h1 {
     margin-top: 16px;
-    font-size: 32px;
+    margin-left: 8px;
+    font-size: 40px;
   }
   
   h2 {
-    margin-top: 0;
-    font-size: 20px;
+    margin-top: 8px;
+    margin-left: 8px;
+    font-size: 28px;
   }
   
   h3 {
     margin-top: 0;
     font-size: 18px;
   }
-  
-  h4 {
-    margin-top: 0;
-    font-size: 16px;
-  }
-  
-  h5 {
-    margin-top: 0;
-    font-size: 14px;
-  }
-  
-  h6 {
-    margin-top: 0;
-    font-size: 12px;
+
+  p {
+    font-size: 19px;
   }
   
   code {
@@ -46,11 +55,32 @@
     padding-inline-start: 20px;
   }
 
+  label {
+    font-size: 19px;
+  }
+  
+  input {
+    font-size: 19px;
+  }
+
+  .ratchet-editable-items-list {
+    width: 640px;
+  }
+
   .sidebar-container { 
     box-shadow: rgba(3, 102, 214, 0.3) 0px 0px 0px 3px;
     width: fit-content;
     position: absolute;
     background-color: white;
+    border-radius: 1rem;
+  }
+
+  .ratchet-editor-popover {
+    box-shadow: rgba(3, 102, 214, 0.3) 0px 0px 0px 3px;
+    width: fit-content;
+    position: absolute;
+    background-color: white;
+    border-radius: 1rem;
   }
 
   .sidebar-div {
@@ -59,12 +89,20 @@
 
   .sidebar-item {
     box-shadow: rgba(0, 0, 0, 0.16) 0px 1px 4px, rgb(51, 51, 51) 0px 0px 0px 3px;
+    border-radius: 1rem;
+    transition-duration: 0.25s;
+    margin: 6px;
+    padding-left: 7px;
+    padding-right: 7px;
   }
 
   .sidebar-item:hover {
     box-shadow: rgba(0, 0, 0, 0.16) 0px 1px 4px, rgb(71, 91, 71) 0px 0px 0px 3px;
+    border-radius: 0.25rem;
+    padding-left: 8px;
+    padding-right: 8px;
   }
-  
+
   * {
     box-sizing: border-box;
   }
@@ -73,6 +111,12 @@
     font-family: sans-serif;
     margin: 20px;
     padding: 0;
+  }
+
+  .login-fields {
+    display: block;
+    float: left;
+    width: 92px;
   }
 
   .editor-fields {
@@ -84,5 +128,5 @@
   .dev-editor-fields {
     display: block;
     float: left;
-    width: 118px;
+    width: 124px;
   }

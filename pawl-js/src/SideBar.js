@@ -1,6 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function SideBar({pageSetter=() => {}}) {
+    const [showLogin, setShowLogin] = useState(true);
+
+    const init = async() => {
+        var cookies = await cookieStore.getAll();
+        var discoveredCookie = cookies.find( (x) => x.name == "X-Ratchet-Auth-Token" );
+        if (discoveredCookie && discoveredCookie.expires > Date.now()) {
+            setShowLogin(false);
+        } else {
+            setShowLogin(true);
+        }
+    };
+
+    useEffect( () => { init() }, []);
 
     const setPage = (desiredPage) => {
         pageSetter(desiredPage);
@@ -18,11 +31,13 @@ export default function SideBar({pageSetter=() => {}}) {
                     User Editor
                 </label>
             </div>
-            <div className="sidebar-div">
-                <label className="sidebar-item" onClick={() => {setPage("pawl-login")}}>
-                    Login
-                </label>
-            </div>
+            { showLogin &&
+                <div className="sidebar-div">
+                    <label className="sidebar-item" onClick={() => {setPage("pawl-login")}}>
+                        Login
+                    </label>
+                </div>
+            }
         </div>
     );
 

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { IconX } from '@tabler/icons-react';
 
 export default function DeviceEditor({ initialNetworkId = '', editingNetworkId = false, addComplete = () => {}}) {
     const [networkid, setNetworkid] = useState(initialNetworkId);
@@ -34,6 +35,10 @@ export default function DeviceEditor({ initialNetworkId = '', editingNetworkId =
         }
     };
 
+    const handleCancel = () => {
+        addComplete(networkid);
+    };
+
     let actionName;
     if(editingNetworkId) {
         actionName = "Save Changes";
@@ -42,7 +47,7 @@ export default function DeviceEditor({ initialNetworkId = '', editingNetworkId =
     }
 
     return (
-        <div>
+        <div className="ratchet-editor-popover">
             {editingNetworkId ? ( <h2>Edit System</h2>) : (<h2>Add System</h2>)}
             <form onSubmit={handleSubmit}>
                 <div>
@@ -60,7 +65,6 @@ export default function DeviceEditor({ initialNetworkId = '', editingNetworkId =
                     <label className="dev-editor-fields">TACACS+ Key:</label>
                     <input
                         type="password"
-                        autocomplete="new-password"
                         value={key}
                         onChange={(e) => setKey(e.target.value)}
                         required
@@ -70,15 +74,15 @@ export default function DeviceEditor({ initialNetworkId = '', editingNetworkId =
                     <label className="dev-editor-fields">Confirm:</label>
                     <input
                         type="password"
-                        autocomplete="new-password"
                         value={confirmKey}
                         onChange={(e) => setConfirmKey(e.target.value)}
                         required
                     />
                 </div>
                 {error && <p style={{ color: 'red' }}>{error}</p>}
-                <button type="submit">{actionName}</button>
+                <button type="submit">{actionName}</button>                
             </form>
+            <button onClick={() => handleCancel()}><IconX /></button>
         </div>
     );
 }

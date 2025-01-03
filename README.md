@@ -21,6 +21,7 @@ They allow definition of devices and users, as well as a backend API to be fetch
 - [ ] safer cookie disposal
 - [ ] Port from React to Dioxus
 - [ ] Sand down the edges:
+  - [ ] Port 80 redirection 
   - [ ] Ratchet -> ratchet
   - [ ] Toast notifications
   - [ ] Pop-over notification

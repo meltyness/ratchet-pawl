@@ -10,9 +10,10 @@ extern crate rocket;
 use aes::Aes256;
 use fpe::ff1::{BinaryNumeralString, FF1};
 use rocket::{
-    form::Form, fs::{relative, FileServer}, http::{Cookie, CookieJar, SameSite, Status}, request::{self, FromRequest}, response::status, time::Duration, tokio::sync::Mutex, tokio::sync::oneshot, tokio::sync::oneshot::Sender, tokio::sync::oneshot::Receiver, Request};
+    form::Form, fs::{relative, FileServer}, http::{Cookie, CookieJar, SameSite, Status}, request::{self, FromRequest}, response::status, time::Duration, tokio::sync::Mutex, tokio::sync::oneshot, tokio::sync::oneshot::Sender, Request};
 
 use rocket::serde::{json::Json, Serialize};
+use rocket::{Rocket, Build};
 
 use lazy_static::lazy_static;
 use serde::Deserialize;
@@ -23,6 +24,8 @@ use std::{collections::HashMap, env, marker::PhantomData, sync::Arc, time::Insta
 use pwhash::bcrypt;
 
 use redb::{Database, ReadableTable, TableDefinition};
+
+use libc::{mlockall, MCL_CURRENT, MCL_FUTURE, MCL_ONFAULT};
 
 const THE_DATABASE: &str = "ratchet_db.redb";
 // XXX: this has to be less than i64::MAX.
@@ -107,7 +110,10 @@ lazy_static! {
     static ref PERM_DB_KEY: Arc<&'static [u8; 32]> = {
         // SAFETY: DB_KEY must not be mutated after init, see rtp_take_key
         // if anyone else touches DB_KEY and not PERM_DB_KEY, slap them.
-        unsafe { Arc::new(&DB_KEY) }
+        unsafe {
+            #[allow(static_mut_refs)]
+            Arc::new(&DB_KEY) 
+        }
     };
 }
 /// SAFETY: This must only be called once prior to operation of any 
@@ -118,6 +124,7 @@ lazy_static! {
 pub unsafe fn rtp_take_key (key: &String) {
     // SAFETY: Nothing else writes the DB_KEY.
     unsafe {
+        #[allow(static_mut_refs)]
         DB_KEY.iter_mut()
             .enumerate()
             .for_each(|(i,k)| *k = *key.as_bytes()
@@ -331,7 +338,7 @@ async fn api_long_poll(_valid: RatchetApiKey) -> String {
         pins.push(tx);
     }
     match rx.await {
-        Ok(v) => String::from("Update"),
+        Ok(_v) => String::from("Update"),
         Err(_) => String::from(""),
     }
 }
@@ -353,8 +360,23 @@ fn conflict(_req: &Request) -> String {
     format!("Conflict")
 }
 
-#[launch]
-async fn rocket() -> _ {
+fn main() {
+    // lock all allocations
+    let result = unsafe { mlockall(MCL_CURRENT | MCL_FUTURE | MCL_ONFAULT) };
+    if result != 0 {
+        eprintln!("mlockall failed with error code: {}", result);
+    } else {
+        println!("mlockall succeeded");
+    }
+    // https://github.com/rwf2/Rocket/issues/1881 👍👍👍
+    rocket::execute(async move {
+            let _ = rocket().await
+            .launch()
+            .await;
+        });
+}
+
+async fn rocket() -> Rocket<Build> {
     rtp_force_db_init().await.expect("Unable to init database");
     rtp_import_database().await.expect("Error importing database");
     
@@ -608,7 +630,7 @@ impl<'r> FromRequest<'r> for RatchetApiKey {
     type Error = RatchetAuthError;
 
     async fn from_request(req: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
-        let mut api_key_store = RATCHET_APIKEYS.lock().await;
+        let api_key_store = RATCHET_APIKEYS.lock().await;
         if let Some(api_key) = req.headers().get_one("X-Ratchet-Api-Key") {
             match api_key_store.get_key_value(api_key) {
                 Some((_, _)) => {

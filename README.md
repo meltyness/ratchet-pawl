@@ -15,7 +15,6 @@ They allow definition of devices and users, as well as a backend API to be fetch
 
 ## Future plans / Roadmap
 - [ ] ❌ Detailed input sanitization / validation
-- [ ] ❌ Memory hardening, like the Daemon to prevent keys getting persisted improperly.
 - [ ] ❓ assess pre-hashing architecture, so that
 - [ ] Secure initialization / signup invite link
 - [ ] safer cookie disposal
@@ -40,6 +39,7 @@ They allow definition of devices and users, as well as a backend API to be fetch
 - [x] Deployment architecture / Helm/Docker/K8s/etcd, Nullsoft, Rust-Crate, Snap, etc.
 - [x] ❌ Data masking to prevent persisting keys in the clear.
 - [x] ❌ Bcrypt credential hashing to prevent persisting user passwords in the clear.
+- [x] ❌ Memory hardening, like the Daemon to prevent keys getting persisted improperly.
 
 ## Screenshots
 It's not much to look at, very simple at this stage.

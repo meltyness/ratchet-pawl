@@ -4,6 +4,8 @@
 
 This is a minimalist frontend for configuring Ratchet. It is draft-phase, and absolutely needs a bit more polish.
 
+See https://github.com/meltyness/ratchet-cycle for a neat way to deploy the whole thing.
+
 ## Overview / Architecture
 It uses [Rocket](https://rocket.rs) to produce some endpoints, which are enumerated in `fn rocket`
 

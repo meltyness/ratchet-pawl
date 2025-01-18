@@ -120,6 +120,7 @@ lazy_static! {
 /// accessors or users of the Arc<PERM_DB_KEY>.
 /// 
 /// 😭 i dont want to make good abstractions right now!!
+/// I think this is actually a 'std::LazyLock' maybe use it 
 /// 
 pub unsafe fn rtp_take_key (key: &String) {
     // SAFETY: Nothing else writes the DB_KEY.

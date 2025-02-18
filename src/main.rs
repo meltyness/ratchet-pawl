@@ -19,7 +19,7 @@ use lazy_static::lazy_static;
 use serde::Deserialize;
 use uuid::Uuid;
 use core::str;
-use std::{collections::HashMap, env, marker::PhantomData, sync::{Arc, atomic::{AtomicBool,Ordering}}, time::Instant};
+use std::{collections::{HashSet, HashMap}, env, marker::PhantomData, sync::{Arc, atomic::{AtomicBool,Ordering}}, time::Instant};
 
 use pwhash::bcrypt;
 
@@ -101,7 +101,11 @@ lazy_static! {
         let m = HashMap::new();
         Mutex::new(m)
     };
-    static ref RATCHET_COOKIES: Mutex<HashMap<String, Instant>> = {
+    static ref RATCHET_COOKIES: Mutex<HashMap<String, (Instant, String)>> = {
+        let m = HashMap::new();
+        Mutex::new(m)
+    };
+    static ref RATCHET_USER_COOKIES: Mutex<HashMap<String, HashSet<String>>> = {
         let m = HashMap::new();
         Mutex::new(m)
     };
@@ -162,7 +166,8 @@ async fn rtp_notify_pollers() -> status::Custom<&'static str> {
         {
             let mut pins = RATCHET_POLL_PINS.lock().await;
             while let Some(pin) = pins.pop() {
-                pin.send(true);
+                pin.send(true); // it's pub-sub, so it will leak; 
+                                // we don't know the subscriber is gone until after they fail to reconnect.
                 signalled += 1;
             }
         } // after iterating all the long pins
@@ -195,9 +200,18 @@ async fn rtp_notify_pollers() -> status::Custom<&'static str> {
 #[post("/rmuser", format = "multipart/form-data", data = "<username>")]
 async fn rm_user(_admin: RatchetUser, username: Form<String>) -> status::Custom<&'static str> {
     let mut users = RATCHET_USERS.lock().await;
+    // and deauthorize from web shell
+    let mut cookie_store = RATCHET_COOKIES.lock().await;
+    let mut user_cookies = RATCHET_USER_COOKIES.lock().await;
     match users.remove(&*username) {
         Some(user) => {
             RATCHET_USERS_TABLE.rm(&user).await.expect("Database error");
+            match user_cookies.remove(&user.username) {
+                Some(active_cookies) => {
+                    active_cookies.into_iter().for_each(|each_cookie| {cookie_store.remove(&each_cookie);});
+                },
+                None => (),
+            }
             rtp_notify_pollers().await
         },
         None => status::Custom(Status::Gone, ""),
@@ -232,6 +246,9 @@ async fn add_user(_admin: RatchetUser, newuser: Form<RatchetUserEntry>) -> statu
 #[post("/edituser", format = "multipart/form-data", data = "<edited>")]
 async fn edit_user(_admin: RatchetUser, edited: Form<RatchetUserEntry>) -> status::Custom<&'static str> {
     let mut users = RATCHET_USERS.lock().await;
+    // and deauthorize from web shell
+    let mut cookie_store = RATCHET_COOKIES.lock().await;
+    let mut user_cookies = RATCHET_USER_COOKIES.lock().await;
     if !users.contains_key(&edited.username) {
         status::Custom(Status::Gone, "")
     } else {
@@ -239,7 +256,14 @@ async fn edit_user(_admin: RatchetUser, edited: Form<RatchetUserEntry>) -> statu
         if let Ok(h) = bcrypt::hash(user_update.passhash)  {
             user_update.passhash = h;
             RATCHET_USERS_TABLE.write(&user_update).await.expect("Database error");
-            users.insert(user_update.username.clone(), user_update);
+            users.insert(user_update.username.clone(), user_update.clone());
+
+            match user_cookies.remove(&user_update.username) {
+                Some(active_cookies) => {
+                    active_cookies.into_iter().for_each(|each_cookie| {cookie_store.remove(&each_cookie);});
+                },
+                None => (),
+            }
             rtp_notify_pollers().await
         } else {
             // TODO: This doesn't exactly mean this anymore
@@ -400,10 +424,10 @@ fn gone(_req: &Request) -> String {
 fn conflict(_req: &Request) -> String {
     format!("Conflict")
 }
-#[catch(503)]
-fn svc_unavailable(_req: &Request) -> String {
-    format!("Service Unavailable")
-}
+// #[catch(503)]
+// fn svc_unavailable(_req: &Request) -> String {
+//     format!("Service Unavailable")
+// }
 
 fn main() {
     // lock all allocations
@@ -432,7 +456,7 @@ async fn rocket() -> Rocket<Build> {
     initialize_api_key().await.expect("Error initializing API key");
 
     rocket::build()
-        .mount("/", rocket::routes![try_login])
+        .mount("/", rocket::routes![try_login, logged, hangup])
         .mount("/", rocket::routes![api_dump_devs, api_dump_users, api_long_poll])
         .mount("/", rocket::routes![rm_user, edit_user, add_user, get_users])
         .mount("/", rocket::routes![rm_dev, edit_dev, add_dev, get_devs])
@@ -594,13 +618,22 @@ impl<'r> FromRequest<'r> for RatchetUser {
 
     async fn from_request(req: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
         let mut cookie_store = RATCHET_COOKIES.lock().await;
+        let mut user_cookies = RATCHET_USER_COOKIES.lock().await;
         if let Some(cookie) = req.cookies().get("X-Ratchet-Auth-Token") {
             let cookie_name = cookie.value();
 
             match cookie_store.get_key_value(cookie_name) {
-                Some((_, max_age)) if Instant::now() < *max_age => request::Outcome::Success(RatchetUser),
+                Some((_, max_age)) if Instant::now() < max_age.0 => request::Outcome::Success(RatchetUser),
                 Some((_, _)) => {
-                    cookie_store.remove(cookie_name); // toss the cookie.
+                    if let Some((_, associated_user)) = cookie_store.remove(cookie_name){ // toss the cookie.
+                        match user_cookies.get_mut(&associated_user) {
+                            Some(cs) => {
+                                cs.remove(cookie_name);
+                                if cs.len() == 0 { user_cookies.remove(&associated_user); }
+                            },
+                            None => (),
+                        }
+                    }
                     request::Outcome::Error((Status::Unauthorized, RatchetAuthError::NotAuthenticated))
                  },
                 _ => request::Outcome::Error((Status::Unauthorized, RatchetAuthError::NotAuthenticated))
@@ -622,22 +655,78 @@ struct RatchetLoginCreds {
 async fn try_login(cookies: &CookieJar<'_>, creds: Form<RatchetLoginCreds>) -> status::Custom<&'static str> {
     let users = RATCHET_USERS.lock().await;
     let mut cookie_store = RATCHET_COOKIES.lock().await;
-    if bcrypt::verify(&creds.password,
-        users.get(&creds.username)
-            .unwrap_or(&RatchetUserEntry{username: "".to_string(), passhash: "".to_string()}).passhash.as_str()) {
+    let mut user_cookies = RATCHET_USER_COOKIES.lock().await;
+    if bcrypt::verify(&creds.password, &users.get(&creds.username).unwrap_or(&RatchetUserEntry{ username: "".to_string(), passhash: "".to_string() }).passhash) && users.contains_key(&creds.username) {
         let new_uuid = Uuid::new_v4();
         let cookie = Cookie::build(("X-Ratchet-Auth-Token", new_uuid.to_string()))
                             .path("/")
                             .secure(true)
                             .max_age(Duration::minutes(AUTH_TIMEOUT_MINUTES as i64))
-                            .same_site(SameSite::Lax);
+                            .same_site(SameSite::Strict);
                         
-        cookies.add(cookie);        
-        cookie_store.insert(new_uuid.to_string(), Instant::now().checked_add(std::time::Duration::from_secs(AUTH_TIMEOUT_MINUTES*60)).unwrap());
+        cookies.add(cookie); 
+        let timeout = Instant::now() + std::time::Duration::from_secs(AUTH_TIMEOUT_MINUTES*60);
+        cookie_store.insert(new_uuid.to_string(), (timeout,creds.username.clone()));
+        match user_cookies.get_mut(&creds.username) {
+            Some(h) => {
+                h.insert(new_uuid.to_string());
+            },
+            None => {
+                let mut h = HashSet::new();
+                h.insert(new_uuid.to_string());
+                user_cookies.insert(creds.username.clone(), h);
+            },
+        }
+        rocket::tokio::spawn(wipe_cookie(creds.username.clone(), new_uuid.to_string(), timeout));
         status::Custom(Status::Ok, "")
     } else {
         status::Custom(Status::Unauthorized, "")
     }
+}
+
+async fn wipe_cookie(name: String, uuid: String, when: Instant) {
+    rocket::tokio::time::sleep_until(rocket::tokio::time::Instant::from_std(when)).await;
+    {
+        let mut cookie_store = RATCHET_COOKIES.lock().await;
+        let mut user_cookies = RATCHET_USER_COOKIES.lock().await;
+        cookie_store.remove(&uuid);
+        match user_cookies.get_mut(&name) {
+            Some(u) => { 
+                u.remove(&uuid);
+                if u.len() == 0 {
+                    user_cookies.remove(&name);
+                }
+            },
+            None => (),
+        }
+    }
+}
+
+#[get("/logged")]
+async fn logged(_admin: RatchetUser) -> status::Custom<&'static str> {
+    status::Custom(Status::Ok, "")
+}
+
+#[get("/hangup")]
+async fn hangup(_admin: RatchetUser, cookies: &CookieJar<'_>) -> status::Custom<&'static str> {
+    if let Some(c) = cookies.get("X-Ratchet-Auth-Token") {
+        let mut cookie_store = RATCHET_COOKIES.lock().await;
+        let mut user_cookies = RATCHET_USER_COOKIES.lock().await;
+        let cookie_name = c.value();
+        if let Some((_, associated_user)) = cookie_store.remove(cookie_name) { // toss the cookie.
+            match user_cookies.get_mut(&associated_user) {
+                Some(cs) => {
+                    cs.remove(cookie_name);
+                    if cs.len() == 0 {
+                        user_cookies.remove(&associated_user);
+                    }
+                },
+                None => (),
+            }
+        }
+
+    }
+    status::Custom(Status::Ok, "")
 }
 
 #[derive(Clone, FromForm, Debug, Serialize, Deserialize)]

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { IconLogout2 } from '@tabler/icons-react';
 
 export default function SideBar({pageSetter=() => {}}) {
     const [showLogin, setShowLogin] = useState(true);
@@ -35,6 +36,13 @@ export default function SideBar({pageSetter=() => {}}) {
                 <div className="sidebar-div">
                     <label className="sidebar-item" onClick={() => {setPage("pawl-login")}}>
                         Login
+                    </label>
+                </div>
+            }
+            { !showLogin &&
+                <div className="sidebar-div">
+                    <label className="sidebar-item" onClick={() => {setPage("pawl-logout")}}>
+                         <IconLogout2 />
                     </label>
                 </div>
             }

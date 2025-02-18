@@ -21,7 +21,7 @@ export default function UserList ({authorizedRedirect}) {
                 initUsers
             ));
         } else {
-            authorizedRedirect();
+            await authorizedRedirect();
         }
       };
 
@@ -38,10 +38,20 @@ export default function UserList ({authorizedRedirect}) {
         return response.status;
     };
 
+    const checkLoggedIn = async() => {
+        const response = await fetch('logged');
+        if (response.status != 200) {
+            await authorizedRedirect();
+        }
+    }
+
     const handleDelete = async(id) => {
         var res = await sendRemoveUserRequest(id);
         if (res == 200 || res == 410) {
             setUsers(users.filter(user => user.id !== id));
+            await checkLoggedIn();
+        } else if (res == 401) {
+            await authorizedRedirect();
         } else if (res == 503) {
             alert('Caution: ratchet not responding to pawl, update may not take effect.');
             setUsers(users.filter(user => user.id !== id));
@@ -51,10 +61,12 @@ export default function UserList ({authorizedRedirect}) {
     };
 
     const handleFakeDelete = async(id) => {
+        await checkLoggedIn();
         setUsers(users.map(usr => {if (usr.id === id) {usr.deleting = true} return usr;}));
     };
 
     const handleEdit = (id) => {
+        checkLoggedIn();
         setEditingUserId(id);
         if (addingUser) {       // Adding and editing are mutually exclusive
             toggleAddingUser();
@@ -62,10 +74,12 @@ export default function UserList ({authorizedRedirect}) {
     };
 
     const handleCancelEdit = () => {
+        checkLoggedIn();
         setEditingUserId(null);
     };
 
     function createdUser(new_name) {
+        checkLoggedIn();
         if(new_name) {
             setUsers(addUser(users, { username: new_name}));
             toggleAddingUser();
@@ -83,6 +97,7 @@ export default function UserList ({authorizedRedirect}) {
     }
 
     function toggleAddingUser() {
+        checkLoggedIn();
         if (!addingUser) {
             handleCancelEdit();
         }
@@ -100,7 +115,7 @@ export default function UserList ({authorizedRedirect}) {
                 <div key={user.id}>
                     {editingUserId === user.id ? (
                         <div>
-                            <UserEditor initialUsername={user.username} lockUsername={true} addComplete={handleCancelEdit}/>
+                            <UserEditor initialUsername={user.username} lockUsername={true} addComplete={handleCancelEdit} authorizedRedirect={authorizedRedirect}/>
                             <IconUser />
                             <span className="ratchet-listed-object">{user.username}</span>
                         </div>
@@ -119,7 +134,7 @@ export default function UserList ({authorizedRedirect}) {
         <hr />
         {addingUser ? (
                 <div>
-                    <UserEditor addComplete={createdUser}/>
+                    <UserEditor addComplete={createdUser} authorizedRedirect={authorizedRedirect}/>
                     <button onClick={toggleAddingUser} ><IconX /></button>
                 </div>
             ) : (

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import SideBar from "./SideBar"
 import UserList from "./UserList"
@@ -12,6 +12,15 @@ export default function HomePanel(){
     const [isSideBarVisible, setIsSideBarVisible] = useState(false); 
     const [selectedPage, setSelectedPage] = useState("welcome-page");
 
+    const init = async() => {
+        const response = await fetch('logged');
+        if (response.status != 200) {
+            await goLogin();
+        }
+      };
+
+    useEffect( () => { init() }, []);
+
     const goHome = () => {
         setSelectedPage("welcome-page");
     };
@@ -22,13 +31,22 @@ export default function HomePanel(){
         setSelectedPage("pawl-login");
     };
 
+    const forceLogout = async() => {
+        await fetch('hangup');
+    };
+
     const toggleSideBar = () => { 
         setIsSideBarVisible(!isSideBarVisible); 
     };
 
     const pageSelector = (requestedPage) => {
         toggleSideBar();
-        setSelectedPage(requestedPage);
+        if (requestedPage != "pawl-logout") {
+            setSelectedPage(requestedPage);
+        } else {
+            forceLogout();
+            goLogin();
+        }
     };
 
     return (

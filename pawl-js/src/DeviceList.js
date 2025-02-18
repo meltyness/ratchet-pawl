@@ -37,12 +37,15 @@ export default function DeviceList ({authorizedRedirect}) {
             body: data,
         });
 
-        const success = (response.status === 200 || response.status === 410);
-        return success;
+        return response.status;
     };
 
     const handleDelete = async(id) => {
-        if (await sendRemoveDevRequest(id)) {
+        var res = await sendRemoveDevRequest(id);
+        if (res == 200 || res == 410) {
+            setDevices(devices.filter(dev => dev.id !== id));
+        } else if (res == 503) {
+            alert('Caution: ratchet not responding to pawl, update may not take effect.');
             setDevices(devices.filter(dev => dev.id !== id));
         } else {
             alert("Error!"); // TODO: Better feedback.

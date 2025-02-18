@@ -42,7 +42,7 @@ export default function SideBar({pageSetter=() => {}}) {
             { !showLogin &&
                 <div className="sidebar-div">
                     <label className="sidebar-item" onClick={() => {setPage("pawl-logout")}}>
-                         <IconLogout2 />
+                         <IconLogout2 className="logout" />
                     </label>
                 </div>
             }

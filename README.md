@@ -21,7 +21,6 @@ They allow definition of devices and users, as well as a backend API to be fetch
 - [ ] ❌ Detailed input sanitization / validation
 - [ ] ❓ assess pre-hashing architecture, so that
 - [ ] Secure initialization / signup invite link
-- [ ] safer cookie disposal
 - [ ] Port from React to Dioxus
 - [ ] Sand down the edges:
   - [ ] Port 80 redirection 
@@ -41,6 +40,7 @@ They allow definition of devices and users, as well as a backend API to be fetch
 
 ## Built
 
+- [x] safer cookie disposal
 - [x] Deployment architecture / Helm/Docker/K8s/etcd, Nullsoft, Rust-Crate, Snap, etc.
 - [x] ❌ Data masking to prevent persisting keys in the clear.
 - [x] ❌ Bcrypt credential hashing to prevent persisting user passwords in the clear.

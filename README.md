@@ -15,6 +15,8 @@ Also shout-out to [tabler's react icons](https://www.npmjs.com/package/@tabler/i
 
 They allow definition of devices and users, as well as a backend API to be fetched by the ratchet TACACS daemon on launch.
 
+`pawl` forms a sort of publisher over `ratchet` instances, but currently it can only realistically tolerate a single `ratchet` correctly.
+
 ## Future plans / Roadmap
 - [ ] ❌ Detailed input sanitization / validation
 - [ ] ❓ assess pre-hashing architecture, so that
@@ -35,6 +37,7 @@ They allow definition of devices and users, as well as a backend API to be fetch
   - [ ] This is common in this sort of application.
   - [ ] In the same vein, TLS certificate management for the webserver (or appropriate solution)
 - [ ] Distributed replication architecture / fault tolerance / clustering
+- [ ] wholistically address 'pub-sub' between `ratchet` and `pawl`
 
 ## Built
 

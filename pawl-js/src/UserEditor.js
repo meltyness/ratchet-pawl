@@ -28,6 +28,9 @@ export default function UserEditor({ initialUsername = '',
 
         if (response.status == 200) {
             addComplete(username);
+        } else if (response.status == 503) {
+            alert('Caution: ratchet not responding, update may not take effect.'); 
+            addComplete(username);
         } else {
             if (lockUsername) {
                 setError('User no longer exists!');

@@ -26,6 +26,9 @@ export default function DeviceEditor({ initialNetworkId = '', editingNetworkId =
 
         if (response.status == 200) {
             addComplete(networkid);
+        } else if (response.status == 503) {
+            alert('Caution: ratchet not responding, update may not take effect.');
+            addComplete(networkid);
         } else {
             if (editingNetworkId) {
                 setError('System no longer exists!');

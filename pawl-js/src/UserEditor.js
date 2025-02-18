@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { IconX } from '@tabler/icons-react';
 
 export default function UserEditor({ initialUsername = '', 
-                                     lockUsername = false, 
+                                     lockUsername = false,
+                                     authorizedRedirect,
                                      addComplete = () => {}}) {
     const [username, setUsername] = useState(initialUsername);
     const [password, setPassword] = useState('');
@@ -31,6 +32,8 @@ export default function UserEditor({ initialUsername = '',
         } else if (response.status == 503) {
             alert('Caution: ratchet not responding, update may not take effect.'); 
             addComplete(username);
+        } else if (response.status == 401) {
+            authorizedRedirect();
         } else {
             if (lockUsername) {
                 setError('User no longer exists!');

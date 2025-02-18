@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { IconX } from '@tabler/icons-react';
 
-export default function DeviceEditor({ initialNetworkId = '', editingNetworkId = false, addComplete = () => {}}) {
+export default function DeviceEditor({ initialNetworkId = '', editingNetworkId = false, authorizedRedirect, addComplete = () => {}}) {
     const [networkid, setNetworkid] = useState(initialNetworkId);
     const [key, setKey] = useState('');
     const [confirmKey, setConfirmKey] = useState('');
@@ -29,6 +29,8 @@ export default function DeviceEditor({ initialNetworkId = '', editingNetworkId =
         } else if (response.status == 503) {
             alert('Caution: ratchet not responding, update may not take effect.');
             addComplete(networkid);
+        } else if (response.status == 401) {
+            authorizedRedirect();
         } else {
             if (editingNetworkId) {
                 setError('System no longer exists!');

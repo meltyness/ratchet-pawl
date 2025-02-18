@@ -22,7 +22,7 @@ export default function DeviceList ({authorizedRedirect}) {
                 initDevs
             ));
         } else {
-            authorizedRedirect();
+            await authorizedRedirect();
         }
       };
 
@@ -40,10 +40,18 @@ export default function DeviceList ({authorizedRedirect}) {
         return response.status;
     };
 
+    const checkLoggedIn = async() => {
+        const response = await fetch('logged');
+        if (response.status != 200) {
+            await authorizedRedirect();
+        }
+    }
+
     const handleDelete = async(id) => {
         var res = await sendRemoveDevRequest(id);
         if (res == 200 || res == 410) {
             setDevices(devices.filter(dev => dev.id !== id));
+            await checkLoggedIn();
         } else if (res == 503) {
             alert('Caution: ratchet not responding to pawl, update may not take effect.');
             setDevices(devices.filter(dev => dev.id !== id));
@@ -53,10 +61,12 @@ export default function DeviceList ({authorizedRedirect}) {
     };
 
     const handleFakeDelete = async(id) => {
+        await checkLoggedIn();
         setDevices(devices.map(dev => {if (dev.id === id) {dev.deleting = true} return dev;}));
     };
 
     const handleEdit = (id) => {
+        checkLoggedIn();
         setEditingDeviceId(id);
         if (addingDevice) {      // Adding and editing are mutually exclusive
             toggleAddingDevice();
@@ -64,10 +74,12 @@ export default function DeviceList ({authorizedRedirect}) {
     };
 
     const handleCancelEdit = () => {
+        checkLoggedIn();
         setEditingDeviceId(null);
     };
 
     function createdDevice(new_network) {
+        checkLoggedIn();
         if(new_network) {
             setDevices(addDevice(devices, { network_id: new_network}));
             toggleAddingDevice();
@@ -84,6 +96,7 @@ export default function DeviceList ({authorizedRedirect}) {
     }
 
     function toggleAddingDevice() {
+        checkLoggedIn();
         if (!addingDevice) {      // Adding and editing are mutually exclusive
             handleCancelEdit();
         }
@@ -101,7 +114,7 @@ export default function DeviceList ({authorizedRedirect}) {
                 <div key={dev.id}>
                     {editingDeviceId === dev.id ? (
                         <div>
-                            <DeviceEditor initialNetworkId={dev.network_id} editingNetworkId={true} addComplete={handleCancelEdit}/>
+                            <DeviceEditor initialNetworkId={dev.network_id} editingNetworkId={true} addComplete={handleCancelEdit} authorizedRedirect={authorizedRedirect}/>
                             <IconRouter />
                             <span className="ratchet-listed-object">{dev.network_id}</span>
                         </div>
@@ -120,7 +133,7 @@ export default function DeviceList ({authorizedRedirect}) {
         <hr />
         {addingDevice ? (
                 <div>
-                    <DeviceEditor addComplete={createdDevice}/>
+                    <DeviceEditor addComplete={createdDevice} authorizedRedirect={authorizedRedirect}/>
                     <button onClick={toggleAddingDevice}><IconX /></button>
                 </div>
             ) : (

@@ -23,7 +23,7 @@ They allow definition of devices and users, as well as a backend API to be fetch
 - [ ] Secure initialization / signup invite link
 - [ ] Port from React to Dioxus
 - [ ] Sand down the edges:
-  - [ ] I don't like how the logout button is aligned
+  - [x] I don't like how the logout button is aligned
   - [ ] Port 80 redirection 
   - [ ] Ratchet -> ratchet
   - [ ] Toast notifications

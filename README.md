@@ -24,6 +24,7 @@ They allow definition of devices and users, as well as a backend API to be fetch
 - [ ] Port from React to Dioxus
 - [ ] Sand down the edges:
   - [x] I don't like how the logout button is aligned
+  - [ ] Focusable/non-focusable implicit dismissal
   - [ ] Port 80 redirection 
   - [ ] Ratchet -> ratchet
   - [ ] Toast notifications

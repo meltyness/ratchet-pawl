@@ -38,6 +38,9 @@ lazy_static! {
 // XXX: this has to be less than i64::MAX.
 const AUTH_TIMEOUT_MINUTES: u64 = 30;
 
+// Protect against timing / enumeration
+static GUTTER: std::sync::LazyLock<Arc<RwLock<String>>> = std::sync::LazyLock::new(|| Arc::new(RwLock::new(String::new())));
+
 /// Wraps the tables to provide type protection based on the original declaration.
 /// 
 /// Each table is associated to the same struct type (i.e., the value is always the same)
@@ -504,6 +507,8 @@ async fn rocket() -> Rocket<Build> {
     initialize_first_user().await.expect("Error initializing first user");
     initialize_api_key().await.expect("Error initializing API key");
 
+    rt_generate_gutter().await;
+
     rocket::build()
         .mount("/", rocket::routes![try_login, logged, hangup])
         .mount("/", rocket::routes![api_dump_devs, api_dump_users, api_long_poll])
@@ -511,6 +516,27 @@ async fn rocket() -> Rocket<Build> {
         .mount("/", rocket::routes![rm_dev, edit_dev, add_dev, get_devs])
         .mount("/", FileServer::from(relative!("pawl-js/build/")))
         .register("/", catchers![not_found, gone, unauth, conflict])
+}
+
+async fn rt_generate_gutter() {
+    let mut g = GUTTER.write().await;
+    g.push_str(&pwhash::bcrypt::hash(rt_generate_gutter_string()).expect("Ratchet Fatal: Unable to generate gutter"));
+}
+
+fn rt_generate_gutter_string() -> String { 
+    (0..72).fold(
+        String::with_capacity(72),
+        |mut s, _| {
+            loop {
+                let c = rand::random::<u8>();
+                if c.is_ascii_alphanumeric() || c.is_ascii_graphic() || c.is_ascii_punctuation() {
+                    s.push(c as char);
+                    break;
+                }
+            }
+            s
+        }
+    )
 }
 
 /// An invariant that is largely maintained throughout is that
@@ -715,7 +741,7 @@ async fn try_login(cookies: &CookieJar<'_>, creds: Form<RatchetLoginCreds>) -> s
     let users = RATCHET_USERS.lock().await;
     let mut cookie_store = RATCHET_COOKIES.lock().await;
     let mut user_cookies = RATCHET_USER_COOKIES.lock().await;
-    if bcrypt::verify(&creds.password, &users.get(&creds.username).unwrap_or(&RatchetUserEntry{ username: "".to_string(), passhash: "".to_string() }).passhash) && users.contains_key(&creds.username) {
+    if bcrypt::verify(&creds.password, &users.get(&creds.username).unwrap_or(&RatchetUserEntry{ username: "".to_string(), passhash: &GUTTER.read().to_string() }).passhash) && users.contains_key(&creds.username) {
         let new_uuid = Uuid::new_v4();
         let cookie = Cookie::build(("X-Ratchet-Auth-Token", new_uuid.to_string()))
                             .path("/")

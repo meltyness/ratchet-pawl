@@ -28,18 +28,38 @@ use redb::{Database, ReadableTable, TableDefinition};
 use libc::{mlockall, MCL_CURRENT, MCL_FUTURE, MCL_ONFAULT};
 
 const THE_DATABASE: &str = "ratchet_db.redb";
+
+lazy_static! {
+    static ref DB: Database = {
+        Database::create(THE_DATABASE).expect("Unable to create database")
+    };
+}
+
 // XXX: this has to be less than i64::MAX.
 const AUTH_TIMEOUT_MINUTES: u64 = 30;
 
 /// Wraps the tables to provide type protection based on the original declaration.
+/// 
+/// Each table is associated to the same struct type (i.e., the value is always the same)
+/// This enables serde to do its thing, reliably.
+/// 
+/// TODO:
+/// - Want to squash occasionally
+/// - Batching transactions would be more performant, but would likely decouple
+///   the UI from success/failure feedback. Possibly something aggressive like
+///   a channel that solves both neatly, tunable for disk i/o.
+/// - Suspect running Database::create repeatedly probably is also a perf impact
+/// 
 struct ReadWriteTable<'a, K, V, T>(TableDefinition<'a, K, V>, PhantomData<T>) where
 K: redb::Key + 'static,
 V: redb::Value + 'static,
 T: Serialize + Deserialize<'a> + RatchetKeyed;
 
 impl<'a, T> ReadWriteTable<'a, &'a str, Vec<u8>, T> where T: Serialize + Deserialize<'a> + RatchetKeyed {
+    /// Single write transaction, which due to nature of KVS includes
+    /// both 'add' entry and 'modify' by way of wholesale replacement.
     pub async fn write(&'static self, item: &T) -> Result<(), redb::Error> {
-        let db = Database::create(THE_DATABASE)?;
+        let db = &DB;
         let key: &[u8; 32]  = *PERM_DB_KEY.clone();
         let ff = FF1::<Aes256>::new(key, 2).unwrap();
         let write_txn = db.begin_write()?;
@@ -55,8 +75,9 @@ impl<'a, T> ReadWriteTable<'a, &'a str, Vec<u8>, T> where T: Serialize + Deseria
         Ok(())
     }
 
+    /// Single remove transaction.
     pub async fn rm(&'static self, item: &T) -> Result<(), redb::Error> {
-        let db = Database::create(THE_DATABASE)?;
+        let db = &DB;
         let write_txn = db.begin_write()?;
         {
             let mut table = write_txn.open_table(self.unwrap())?;
@@ -68,6 +89,8 @@ impl<'a, T> ReadWriteTable<'a, &'a str, Vec<u8>, T> where T: Serialize + Deseria
         Ok(())
     } 
 
+    /// TODO: Ideally we don't have to repetedly clone this, not sure
+    /// what that's doing to the vtables.
     pub fn unwrap(&self) -> TableDefinition<'static, &str, Vec<u8>> {
         self.0.to_owned()
     }
@@ -100,6 +123,7 @@ lazy_static! {
         let m = HashMap::new();
         Mutex::new(m)
     };
+    // TODO: It's pretty risky to leave these as separate mutex
     static ref RATCHET_COOKIES: Mutex<HashMap<String, (Instant, String)>> = {
         let m = HashMap::new();
         Mutex::new(m)
@@ -123,6 +147,7 @@ lazy_static! {
     // Recommend polling upon attach to subscribers.
     static ref LONG_POLL_EPOCH: AtomicU64 = AtomicU64::new(1);
 }
+
 /// SAFETY: This must only be called once prior to operation of any 
 /// accessors or users of the Arc<PERM_DB_KEY>.
 /// 
@@ -141,6 +166,11 @@ pub unsafe fn rtp_take_key (key: &String) {
     }
 }
 
+/// Backend data for users, used for authentication
+/// 
+/// Should not be sent over any unsecure channel, since
+/// hashes are subject to attacks.
+/// 
 #[derive(Clone, FromForm, Debug, Serialize, Deserialize)]
 struct RatchetUserEntry {
     username: String,
@@ -153,16 +183,31 @@ impl RatchetKeyed for RatchetUserEntry{
     }
 }
 
+/// For long-pollers, each API change results in sending a notification out.
+/// This notificaation is associated with a serial number for the total number of
+/// changes seen so far.
+/// 
+/// Then on re-attach, a poller who may have missed multiple updates is 
+/// immediately notified again, rather than leaving open the possibility of 
+/// missed updates, and a subscriber in a stale state.
+/// 
+/// It's also really really cheap.
+/// 
+/// TODO: Frontend pollers for AJAX / real-time updates.
+/// 
 async fn rtp_notify_pollers() {
     LONG_POLL_EPOCH.fetch_add(1, Ordering::Relaxed);
     let mut pins = RATCHET_POLL_PINS.lock().await;
     while let Some(pin) = pins.pop() {
-        pin.send(true); // it's pub-sub, so it will leak; 
+        let _ = pin.send(true); // it's pub-sub, so it will leak; 
                         // we don't know the subscriber is gone until after they fail to reconnect.
     }
 }
 
-
+/// Frontend API for removing a user by username.
+/// 
+/// TODO: Don't remove the bottom dollar
+/// 
 #[post("/rmuser", format = "multipart/form-data", data = "<username>")]
 async fn rm_user(_admin: RatchetUser, username: Form<String>) -> status::Custom<&'static str> {
     let mut users = RATCHET_USERS.lock().await;
@@ -185,6 +230,10 @@ async fn rm_user(_admin: RatchetUser, username: Form<String>) -> status::Custom<
     }
 }
 
+/// Frontend API for adding a user.
+/// 
+/// TODO: Input validation, password policy
+/// 
 #[post("/adduser", format = "multipart/form-data", data = "<newuser>")]
 async fn add_user(_admin: RatchetUser, newuser: Form<RatchetUserEntry>) -> status::Custom<&'static str> {
     let mut users = RATCHET_USERS.lock().await;
@@ -211,6 +260,10 @@ async fn add_user(_admin: RatchetUser, newuser: Form<RatchetUserEntry>) -> statu
     }
 }
 
+/// Frontend API for editing a user.
+/// 
+/// TODO: Input validation, password policy
+/// 
 #[post("/edituser", format = "multipart/form-data", data = "<edited>")]
 async fn edit_user(_admin: RatchetUser, edited: Form<RatchetUserEntry>) -> status::Custom<&'static str> {
     let mut users = RATCHET_USERS.lock().await;
@@ -241,11 +294,14 @@ async fn edit_user(_admin: RatchetUser, edited: Form<RatchetUserEntry>) -> statu
     }
 }
 
+/// Special structure to only return safe userdata
+/// back to the Frontend.
 #[derive(Clone, FromForm, Debug, Serialize)]
 struct RatchetFrontendUserEntry {
     username: String,
 }
 
+/// Frontend API for listing users.
 #[get("/getusers")]
 async fn get_users(_admin: RatchetUser) -> Json<Vec<RatchetFrontendUserEntry>> {
     let users = RATCHET_USERS.lock().await;
@@ -259,6 +315,11 @@ async fn get_users(_admin: RatchetUser) -> Json<Vec<RatchetFrontendUserEntry>> {
     )
 }
 
+/// Backend data for TACACS+ clients, used for authentication
+/// 
+/// Should not be sent over any unsecure channel, since
+/// hashes are subject to attacks.
+/// 
 #[derive(Clone, FromForm, Debug, Serialize, Deserialize)]
 struct RatchetDevEntry {
     network_id: String,
@@ -271,6 +332,7 @@ impl RatchetKeyed for RatchetDevEntry{
     }
 }
 
+/// Frontend API for removing devices.
 #[post("/rmdev", format = "multipart/form-data", data = "<network_id>")]
 async fn rm_dev(_admin: RatchetUser, network_id: Form<String>) -> status::Custom<&'static str> {
     let mut devs = RATCHET_DEVICES.lock().await;
@@ -284,6 +346,10 @@ async fn rm_dev(_admin: RatchetUser, network_id: Form<String>) -> status::Custom
     }
 }
 
+/// Frontend API for adding devices.
+///  
+/// TODO: Input validation, password policy
+/// 
 #[post("/adddev", format = "multipart/form-data", data = "<newdev>")]
 async fn add_dev(_admin: RatchetUser, newdev: Form<RatchetDevEntry>) -> status::Custom<&'static str> {
     let mut devs = RATCHET_DEVICES.lock().await;
@@ -299,6 +365,10 @@ async fn add_dev(_admin: RatchetUser, newdev: Form<RatchetDevEntry>) -> status::
     }
 }
 
+/// Frontend API for editing devices.
+///  
+/// TODO: Input validation, password policy
+/// 
 #[post("/editdev", format = "multipart/form-data", data = "<edited>")]
 async fn edit_dev(_admin: RatchetUser, edited: Form<RatchetDevEntry>) -> status::Custom<&'static str> {
     let mut devs = RATCHET_DEVICES.lock().await;
@@ -313,11 +383,14 @@ async fn edit_dev(_admin: RatchetUser, edited: Form<RatchetDevEntry>) -> status:
     }
 }
 
+/// Special structure to only return safe devdata
+/// back to the Frontend.
 #[derive(Clone, FromForm, Debug, Serialize)]
 struct RatchetFrontendDevEntry {
     network_id: String,
 }
 
+/// Frontend API for listing users.
 #[get("/getdevs")]
 async fn get_devs(_admin: RatchetUser) -> Json<Vec<RatchetFrontendDevEntry>> {
     let devs = RATCHET_DEVICES.lock().await;
@@ -330,6 +403,7 @@ async fn get_devs(_admin: RatchetUser) -> Json<Vec<RatchetFrontendDevEntry>> {
     )
 }
 
+/// Backend API for getting user creds.
 #[get("/api/dumpusers")]
 async fn api_dump_users(_valid: RatchetApiKey) -> String {
     let users = RATCHET_USERS.lock().await;
@@ -345,6 +419,7 @@ async fn api_dump_users(_valid: RatchetApiKey) -> String {
     )
 }
 
+/// Backend API for getting dev keys.
 #[get("/api/dumpdevs")]
 async fn api_dump_devs(_valid: RatchetApiKey) -> String {
     let devs = RATCHET_DEVICES.lock().await;
@@ -360,6 +435,7 @@ async fn api_dump_devs(_valid: RatchetApiKey) -> String {
     )
 }
 
+/// Backend API for signalling updates.
 #[get("/api/longpoll?<serial>")]
 async fn api_long_poll(_valid: RatchetApiKey, serial: Option<u64>) -> String {
     // Serial number mismatch
@@ -437,6 +513,8 @@ async fn rocket() -> Rocket<Build> {
         .register("/", catchers![not_found, gone, unauth, conflict])
 }
 
+/// An invariant that is largely maintained throughout is that
+/// there is at least one user who can administer ratchet in the database.
 async fn initialize_first_user() -> Result<(), redb::Error> {
     let mut users_init = RATCHET_USERS.lock().await;
     if users_init.len() == 0 {
@@ -461,9 +539,11 @@ async fn initialize_first_user() -> Result<(), redb::Error> {
     Ok(())
 }
 
-
+/// redb doesn't write any tables until you open them.
+/// this ensures that the needed tables exist in the
+/// database.
 async fn rtp_force_db_init() -> Result<(), redb::Error> {
-    let db = Database::create(THE_DATABASE)?;
+    let db = &DB;
 
     let write_txn = db.begin_write()?;
     {
@@ -499,9 +579,13 @@ async fn rtp_force_db_init() -> Result<(), redb::Error> {
     Ok(())
 }
 
-
+/// This is the mechanism that puts the database in memory.
+/// 
+/// pawl ensures that its hash tables always exactly match
+/// the contents of the database, and that all clients are
+/// eventually consistent with the status.
 async fn rtp_import_database() -> Result<(), redb::Error> {
-    let db = Database::create(THE_DATABASE)?;
+    let db = &DB;
     let mut users_init = RATCHET_USERS.lock().await;
     let mut devs_init: rocket::tokio::sync::MutexGuard<'_, HashMap<String, RatchetDevEntry>> = RATCHET_DEVICES.lock().await;
     let mut api_init = RATCHET_APIKEYS.lock().await;
@@ -588,7 +672,8 @@ impl std::fmt::Debug for RatchetAuthError {
 #[rocket::async_trait]
 impl<'r> FromRequest<'r> for RatchetUser {
     type Error = RatchetAuthError;
-
+    /// Mechanism to identify whether someone who posesses
+    /// a cookies has an authorized cookie or not.
     async fn from_request(req: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
         let mut cookie_store = RATCHET_COOKIES.lock().await;
         let mut user_cookies = RATCHET_USER_COOKIES.lock().await;
@@ -624,6 +709,7 @@ struct RatchetLoginCreds {
     password: String,
 }
 
+/// TODO: Move out west and do something with JWT
 #[post("/trylogin", format = "multipart/form-data", data = "<creds>")]
 async fn try_login(cookies: &CookieJar<'_>, creds: Form<RatchetLoginCreds>) -> status::Custom<&'static str> {
     let users = RATCHET_USERS.lock().await;
@@ -650,6 +736,8 @@ async fn try_login(cookies: &CookieJar<'_>, creds: Form<RatchetLoginCreds>) -> s
                 user_cookies.insert(creds.username.clone(), h);
             },
         }
+        // Also schedule a task to delete the cookie around the same time as the timeout
+        // deauthorizing it.
         rocket::tokio::spawn(wipe_cookie(creds.username.clone(), new_uuid.to_string(), timeout));
         status::Custom(Status::Ok, "")
     } else {
@@ -657,6 +745,8 @@ async fn try_login(cookies: &CookieJar<'_>, creds: Form<RatchetLoginCreds>) -> s
     }
 }
 
+/// When the timeout has lapsed, the cookie is removed from the table, and no longer authorized
+/// Additionally, if the user has no more cookies
 async fn wipe_cookie(name: String, uuid: String, when: Instant) {
     rocket::tokio::time::sleep_until(rocket::tokio::time::Instant::from_std(when)).await;
     {
@@ -667,7 +757,8 @@ async fn wipe_cookie(name: String, uuid: String, when: Instant) {
             Some(u) => { 
                 u.remove(&uuid);
                 if u.len() == 0 {
-                    user_cookies.remove(&name);
+                    user_cookies.remove(&name); // TODO: Encapsulate the maintenance of multiple user cookies
+                                                //  add policies for max simultaneous sessions, etc.
                 }
             },
             None => (),
@@ -675,11 +766,16 @@ async fn wipe_cookie(name: String, uuid: String, when: Instant) {
     }
 }
 
+/// The frontend needs to know if the user is still authenticated so that
+/// data loss isn't encountered, when avoidable.
 #[get("/logged")]
 async fn logged(_admin: RatchetUser) -> status::Custom<&'static str> {
     status::Custom(Status::Ok, "")
 }
 
+/// Users may want to log out and log back in to guarantee 30 more minutes of
+/// installing users whose names are all just floating point values as fast
+/// as disk / I/O contention permit.
 #[get("/hangup")]
 async fn hangup(_admin: RatchetUser, cookies: &CookieJar<'_>) -> status::Custom<&'static str> {
     if let Some(c) = cookies.get("X-Ratchet-Auth-Token") {
@@ -702,6 +798,8 @@ async fn hangup(_admin: RatchetUser, cookies: &CookieJar<'_>) -> status::Custom<
     status::Custom(Status::Ok, "")
 }
 
+/// The API Key is for the backend / ratchet-proper to fetch details about
+/// the authentication / authorization database.
 #[derive(Clone, FromForm, Debug, Serialize, Deserialize)]
 struct RatchetApiKey {
     api_key: String,
@@ -713,6 +811,7 @@ impl RatchetKeyed for RatchetApiKey{
     }
 }
 
+/// Choose a pretty hard-to-guess API key
 async fn initialize_api_key() -> Result<(), redb::Error> { 
     let mut api_key: String = String::with_capacity(128);
     let mut api_init = RATCHET_APIKEYS.lock().await;
@@ -724,6 +823,8 @@ async fn initialize_api_key() -> Result<(), redb::Error> {
             }
         }
         println!("Ratchet-Pawl Initialization creating API-Key details:");
+        // CONTRACT: ratchet-cycle expects the api-key to be dumped in the first 10 or so 
+        // lines for pawl's execution, make sure to maintain this; it matches on "Api-Key: " pattern
         println!("Api-Key: {}", api_key);
         api_init.insert(api_key.clone(), RatchetApiKey {
                 api_key: api_key.clone()
@@ -738,7 +839,7 @@ async fn initialize_api_key() -> Result<(), redb::Error> {
 #[rocket::async_trait]
 impl<'r> FromRequest<'r> for RatchetApiKey {
     type Error = RatchetAuthError;
-
+    /// Mechanism to identify an API user.
     async fn from_request(req: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
         let api_key_store = RATCHET_APIKEYS.lock().await;
         if let Some(api_key) = req.headers().get_one("X-Ratchet-Api-Key") {

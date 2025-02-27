@@ -39,7 +39,7 @@ lazy_static! {
 const AUTH_TIMEOUT_MINUTES: u64 = 30;
 
 // Protect against timing / enumeration
-static GUTTER: std::sync::LazyLock<Arc<RwLock<String>>> = std::sync::LazyLock::new(|| Arc::new(RwLock::new(String::new())));
+static GUTTER: std::sync::LazyLock<Arc<rocket::tokio::sync::RwLock<String>>> = std::sync::LazyLock::new(|| Arc::new(rocket::tokio::sync::RwLock::new(String::new())));
 
 /// Wraps the tables to provide type protection based on the original declaration.
 /// 
@@ -741,7 +741,7 @@ async fn try_login(cookies: &CookieJar<'_>, creds: Form<RatchetLoginCreds>) -> s
     let users = RATCHET_USERS.lock().await;
     let mut cookie_store = RATCHET_COOKIES.lock().await;
     let mut user_cookies = RATCHET_USER_COOKIES.lock().await;
-    if bcrypt::verify(&creds.password, &users.get(&creds.username).unwrap_or(&RatchetUserEntry{ username: "".to_string(), passhash: &GUTTER.read().to_string() }).passhash) && users.contains_key(&creds.username) {
+    if bcrypt::verify(&creds.password, &users.get(&creds.username).unwrap_or(&RatchetUserEntry{ username: "".to_string(), passhash: (&GUTTER.read().await).to_string() }).passhash) && users.contains_key(&creds.username) {
         let new_uuid = Uuid::new_v4();
         let cookie = Cookie::build(("X-Ratchet-Auth-Token", new_uuid.to_string()))
                             .path("/")

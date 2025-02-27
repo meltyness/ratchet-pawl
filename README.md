@@ -38,10 +38,10 @@ They allow definition of devices and users, as well as a backend API to be fetch
   - [ ] This is common in this sort of application.
   - [ ] In the same vein, TLS certificate management for the webserver (or appropriate solution)
 - [ ] Distributed replication architecture / fault tolerance / clustering
-- [ ] wholistically address 'pub-sub' between `ratchet` and `pawl`
 
 ## Built
 
+- [x] wholistically address 'pub-sub' between `ratchet` and `pawl`
 - [x] safer cookie disposal
 - [x] Deployment architecture / Helm/Docker/K8s/etcd, Nullsoft, Rust-Crate, Snap, etc.
 - [x] ❌ Data masking to prevent persisting keys in the clear.

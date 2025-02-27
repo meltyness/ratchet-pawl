@@ -520,7 +520,7 @@ async fn rocket() -> Rocket<Build> {
 
 async fn rt_generate_gutter() {
     let mut g = GUTTER.write().await;
-    g.push_str(&pwhash::bcrypt::hash(rt_generate_gutter_string()).expect("Ratchet Fatal: Unable to generate gutter"));
+    g.push_str(&bcrypt::hash(rt_generate_gutter_string()).expect("Ratchet Fatal: Unable to generate gutter"));
 }
 
 fn rt_generate_gutter_string() -> String { 

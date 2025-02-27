@@ -34,6 +34,7 @@ They allow definition of devices and users, as well as a backend API to be fetch
   - [ ] key entry, not *password* entry; password managers shouldn't offer
 - [ ] Trouble monitoring
 - [ ] Advanced security
+  - [ ] Neat, sanctioned, secure backup facility
   - [ ] Frontend lockdown / request filtering
   - [ ] This is common in this sort of application.
   - [ ] In the same vein, TLS certificate management for the webserver (or appropriate solution)

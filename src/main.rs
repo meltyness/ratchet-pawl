@@ -741,7 +741,8 @@ async fn try_login(cookies: &CookieJar<'_>, creds: Form<RatchetLoginCreds>) -> s
     let users = RATCHET_USERS.lock().await;
     let mut cookie_store = RATCHET_COOKIES.lock().await;
     let mut user_cookies = RATCHET_USER_COOKIES.lock().await;
-    if bcrypt::verify(&creds.password, &users.get(&creds.username).unwrap_or(&RatchetUserEntry{ username: "".to_string(), passhash: (&GUTTER.read().await).to_string() }).passhash) && users.contains_key(&creds.username) {
+    let cred = users.get(&creds.username);
+    if users.contains_key(&creds.username) && bcrypt::verify(&creds.password, &cred.unwrap().passhash) {
         let new_uuid = Uuid::new_v4();
         let cookie = Cookie::build(("X-Ratchet-Auth-Token", new_uuid.to_string()))
                             .path("/")
@@ -766,6 +767,9 @@ async fn try_login(cookies: &CookieJar<'_>, creds: Form<RatchetLoginCreds>) -> s
         // deauthorizing it.
         rocket::tokio::spawn(wipe_cookie(creds.username.clone(), new_uuid.to_string(), timeout));
         status::Custom(Status::Ok, "")
+    } else if !users.contains_key(&creds.username){ 
+        bcrypt::verify(&creds.password, &GUTTER.read().await);
+        status::Custom(Status::Unauthorized, "")
     } else {
         status::Custom(Status::Unauthorized, "")
     }

@@ -110,6 +110,8 @@ const RATCHET_USERS_TABLE: ReadWriteTable<&str, Vec<u8>, RatchetUserEntry> =
     ReadWriteTable::<&str, Vec<u8>, RatchetUserEntry>(TableDefinition::new("ratchet_users"), PhantomData);
 const RATCHET_DEVS_TABLE: ReadWriteTable<&str, Vec<u8>, RatchetDevEntry> = 
     ReadWriteTable::<&str, Vec<u8>, RatchetDevEntry>(TableDefinition::new("ratchet_devs"), PhantomData);
+const RATCHET_USER_CMD_POLICY_TABLE: ReadWriteTable<&str, Vec<u8>, RatchetUserCmdPolicy> = 
+    ReadWriteTable::<&str, Vec<u8>, RatchetUserCmdPolicy>(TableDefinition::new("ratchet_user_cmd_policy"), PhantomData);
 const RATCHET_APIKEY_TABLE: ReadWriteTable<&str, Vec<u8>, RatchetApiKey> =
     ReadWriteTable::<&str, Vec<u8>, RatchetApiKey>(TableDefinition::new("ratchet_api_keys"), PhantomData);
 
@@ -125,6 +127,10 @@ lazy_static! {
     static ref RATCHET_DEVICES: Mutex<HashMap<String, RatchetDevEntry>> = {
         let m = HashMap::new();
         Mutex::new(m)
+    };
+    static ref RATCHET_USER_CMD_POLICY: Mutex<RatchetUserCmdPolicy> = {
+        let s = String::new();
+        Mutex::new(RatchetUserCmdPolicy(s))
     };
     // TODO: It's pretty risky to leave these as separate mutex
     static ref RATCHET_COOKIES: Mutex<HashMap<String, (Instant, String)>> = {
@@ -406,6 +412,12 @@ async fn get_devs(_admin: RatchetUser) -> Json<Vec<RatchetFrontendDevEntry>> {
     )
 }
 
+/// Frontend API for dumping policy.
+#[get("/getpolicy")]
+async fn get_policy(_admin: RatchetUser) -> String {
+    RATCHET_USER_CMD_POLICY.lock().await.0.clone()
+}
+
 /// Backend API for getting user creds.
 #[get("/api/dumpusers")]
 async fn api_dump_users(_valid: RatchetApiKey) -> String {
@@ -505,6 +517,7 @@ async fn rocket() -> Rocket<Build> {
     rtp_import_database().await.expect("Error importing database");
     
     initialize_first_user().await.expect("Error initializing first user");
+    initialize_user_cmd_pol().await.expect("Error initializing user cmd policy");
     initialize_api_key().await.expect("Error initializing API key");
 
     rt_generate_gutter().await;
@@ -514,6 +527,7 @@ async fn rocket() -> Rocket<Build> {
         .mount("/", rocket::routes![api_dump_devs, api_dump_users, api_long_poll])
         .mount("/", rocket::routes![rm_user, edit_user, add_user, get_users])
         .mount("/", rocket::routes![rm_dev, edit_dev, add_dev, get_devs])
+        .mount("/",rocket::routes![get_policy])
         .mount("/", FileServer::from(relative!("pawl-js/build/")))
         .register("/", catchers![not_found, gone, unauth, conflict])
 }
@@ -537,6 +551,25 @@ fn rt_generate_gutter_string() -> String {
             s
         }
     )
+}
+
+#[derive(Clone, FromForm, Debug, Serialize, Deserialize)]
+struct RatchetUserCmdPolicy(String);
+impl RatchetKeyed for RatchetUserCmdPolicy {
+    fn into_key<'k>(&self) -> &str {
+        "singleton"
+    }
+}
+
+/// An invariant that is largely maintained throughout is that
+/// there is at least one user who can administer ratchet in the database.
+async fn initialize_user_cmd_pol() -> Result<(), redb::Error> {
+    let mut user_cmd_policy_init = RATCHET_USER_CMD_POLICY.lock().await;
+    if user_cmd_policy_init.0.len() == 0 {
+        *user_cmd_policy_init = RatchetUserCmdPolicy(String::from("$\n(\n)"));
+        RATCHET_USER_CMD_POLICY_TABLE.write(&user_cmd_policy_init).await;
+    }
+    Ok(())
 }
 
 /// An invariant that is largely maintained throughout is that
@@ -576,6 +609,7 @@ async fn rtp_force_db_init() -> Result<(), redb::Error> {
         // write initializes tables, tables must be written before they are initialized
         write_txn.open_table(RATCHET_USERS_TABLE.unwrap())?;
         write_txn.open_table(RATCHET_DEVS_TABLE.unwrap())?;
+        write_txn.open_table(RATCHET_USER_CMD_POLICY_TABLE.unwrap())?;
         write_txn.open_table(RATCHET_APIKEY_TABLE.unwrap())?;
         // reading an empty table is a panic.
     }
@@ -614,12 +648,14 @@ async fn rtp_import_database() -> Result<(), redb::Error> {
     let db = &DB;
     let mut users_init = RATCHET_USERS.lock().await;
     let mut devs_init: rocket::tokio::sync::MutexGuard<'_, HashMap<String, RatchetDevEntry>> = RATCHET_DEVICES.lock().await;
+    let mut user_cmd_policy_init = RATCHET_USER_CMD_POLICY.lock().await;
     let mut api_init = RATCHET_APIKEYS.lock().await;
     let write_txn = db.begin_write()?;
     {
         // write initializes tables, tables must be written before they are initialized
         write_txn.open_table(RATCHET_USERS_TABLE.unwrap())?;
         write_txn.open_table(RATCHET_DEVS_TABLE.unwrap())?;
+        write_txn.open_table(RATCHET_USER_CMD_POLICY_TABLE.unwrap())?;
         write_txn.open_table(RATCHET_APIKEY_TABLE.unwrap())?;
         // reading an empty table is a panic.
     }
@@ -662,6 +698,18 @@ async fn rtp_import_database() -> Result<(), redb::Error> {
         //println!("Got {:#?}", new_dev);
         devs_init.insert(record_key.to_string(), new_dev);
     });
+
+    let read_txn = db.begin_read()?;
+    let table = read_txn.open_table(RATCHET_USER_CMD_POLICY_TABLE.unwrap())?;
+    let table_iter = table.iter()?;
+    table_iter.for_each(|tup| {
+        let v = tup.expect("dont get this interface");
+        let val = v.1.value();
+        let val_pt = ff.decrypt(&[], &BinaryNumeralString::from_bytes_le(&val)).unwrap().to_bytes_le();
+        let val_pt = str::from_utf8(&val_pt).unwrap();
+
+        *user_cmd_policy_init = serde_json::from_str(&val_pt).unwrap();
+    });    
 
     let read_txn = db.begin_read()?;
     let table = read_txn.open_table(RATCHET_APIKEY_TABLE.unwrap())?;

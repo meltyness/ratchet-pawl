@@ -20,11 +20,12 @@ use serde::Deserialize;
 use uuid::Uuid;
 use core::str;
 use std::{collections::{HashSet, HashMap}, env, marker::PhantomData, sync::{Arc, atomic::{AtomicU64,Ordering}}, time::Instant};
-
+use std::str::FromStr;
 use pwhash::bcrypt;
 
 use redb::{Database, ReadableTable, TableDefinition};
-
+use precis_profiles::UsernameCasePreserved;
+use precis_profiles::precis_core::profile::Profile;
 use libc::{mlockall, MCL_CURRENT, MCL_FUTURE, MCL_ONFAULT};
 
 const THE_DATABASE: &str = "ratchet_db.redb";
@@ -110,6 +111,8 @@ const RATCHET_USERS_TABLE: ReadWriteTable<&str, Vec<u8>, RatchetUserEntry> =
     ReadWriteTable::<&str, Vec<u8>, RatchetUserEntry>(TableDefinition::new("ratchet_users"), PhantomData);
 const RATCHET_DEVS_TABLE: ReadWriteTable<&str, Vec<u8>, RatchetDevEntry> = 
     ReadWriteTable::<&str, Vec<u8>, RatchetDevEntry>(TableDefinition::new("ratchet_devs"), PhantomData);
+const RATCHET_USER_CMD_POLICY_TABLE: ReadWriteTable<&str, Vec<u8>, RatchetUserCmdPolicy> = 
+    ReadWriteTable::<&str, Vec<u8>, RatchetUserCmdPolicy>(TableDefinition::new("ratchet_user_cmd_policy"), PhantomData);
 const RATCHET_APIKEY_TABLE: ReadWriteTable<&str, Vec<u8>, RatchetApiKey> =
     ReadWriteTable::<&str, Vec<u8>, RatchetApiKey>(TableDefinition::new("ratchet_api_keys"), PhantomData);
 
@@ -125,6 +128,10 @@ lazy_static! {
     static ref RATCHET_DEVICES: Mutex<HashMap<String, RatchetDevEntry>> = {
         let m = HashMap::new();
         Mutex::new(m)
+    };
+    static ref RATCHET_USER_CMD_POLICY: Mutex<RatchetUserCmdPolicy> = {
+        let s = String::new();
+        Mutex::new(RatchetUserCmdPolicy(s))
     };
     // TODO: It's pretty risky to leave these as separate mutex
     static ref RATCHET_COOKIES: Mutex<HashMap<String, (Instant, String)>> = {
@@ -406,6 +413,37 @@ async fn get_devs(_admin: RatchetUser) -> Json<Vec<RatchetFrontendDevEntry>> {
     )
 }
 
+/// Frontend API for modifying policy
+///  
+/// TODO: Input validation, password policy
+/// 
+#[post("/pushpolicy", format = "multipart/form-data", data = "<edited>")]
+async fn push_policy(_admin: RatchetUser, edited: Form<RatchetUserCmdPolicy>) -> status::Custom<&'static str> {
+    let mut policy = RATCHET_USER_CMD_POLICY.lock().await;
+    let new_policy = edited.to_owned();
+
+    if rtp_validate_policy(&new_policy.0) {
+        *policy = new_policy.clone();
+        RATCHET_USER_CMD_POLICY_TABLE.write(&new_policy).await.expect("Database error");
+        rocket::tokio::spawn(rtp_notify_pollers());
+        status::Custom(Status::Ok, "")
+    } else {
+        status::Custom(Status::Conflict, "")
+    }
+}
+
+/// Frontend API for dumping policy.
+#[get("/getpolicy")]
+async fn get_policy(_admin: RatchetUser) -> String {
+    RATCHET_USER_CMD_POLICY.lock().await.0.clone()
+}
+
+/// Backend API for dumping policy.
+#[get("/api/dumppolicy")]
+async fn api_dump_policy(_valid: RatchetApiKey) -> String {
+    RATCHET_USER_CMD_POLICY.lock().await.0.clone()
+}
+
 /// Backend API for getting user creds.
 #[get("/api/dumpusers")]
 async fn api_dump_users(_valid: RatchetApiKey) -> String {
@@ -505,15 +543,17 @@ async fn rocket() -> Rocket<Build> {
     rtp_import_database().await.expect("Error importing database");
     
     initialize_first_user().await.expect("Error initializing first user");
+    initialize_user_cmd_pol().await.expect("Error initializing user cmd policy");
     initialize_api_key().await.expect("Error initializing API key");
 
     rt_generate_gutter().await;
 
     rocket::build()
         .mount("/", rocket::routes![try_login, logged, hangup])
-        .mount("/", rocket::routes![api_dump_devs, api_dump_users, api_long_poll])
+        .mount("/", rocket::routes![api_dump_devs, api_dump_users, api_dump_policy, api_long_poll])
         .mount("/", rocket::routes![rm_user, edit_user, add_user, get_users])
         .mount("/", rocket::routes![rm_dev, edit_dev, add_dev, get_devs])
+        .mount("/",rocket::routes![get_policy, push_policy])
         .mount("/", FileServer::from(relative!("pawl-js/build/")))
         .register("/", catchers![not_found, gone, unauth, conflict])
 }
@@ -537,6 +577,25 @@ fn rt_generate_gutter_string() -> String {
             s
         }
     )
+}
+
+#[derive(Clone, FromForm, Debug, Serialize, Deserialize)]
+struct RatchetUserCmdPolicy(String);
+impl RatchetKeyed for RatchetUserCmdPolicy {
+    fn into_key<'k>(&self) -> &str {
+        "singleton"
+    }
+}
+
+/// An invariant that is largely maintained throughout is that
+/// there is at least one user who can administer ratchet in the database.
+async fn initialize_user_cmd_pol() -> Result<(), redb::Error> {
+    let mut user_cmd_policy_init = RATCHET_USER_CMD_POLICY.lock().await;
+    if user_cmd_policy_init.0.len() == 0 {
+        *user_cmd_policy_init = RatchetUserCmdPolicy(String::from("$\n(\n)"));
+        RATCHET_USER_CMD_POLICY_TABLE.write(&user_cmd_policy_init).await;
+    }
+    Ok(())
 }
 
 /// An invariant that is largely maintained throughout is that
@@ -576,6 +635,7 @@ async fn rtp_force_db_init() -> Result<(), redb::Error> {
         // write initializes tables, tables must be written before they are initialized
         write_txn.open_table(RATCHET_USERS_TABLE.unwrap())?;
         write_txn.open_table(RATCHET_DEVS_TABLE.unwrap())?;
+        write_txn.open_table(RATCHET_USER_CMD_POLICY_TABLE.unwrap())?;
         write_txn.open_table(RATCHET_APIKEY_TABLE.unwrap())?;
         // reading an empty table is a panic.
     }
@@ -614,12 +674,14 @@ async fn rtp_import_database() -> Result<(), redb::Error> {
     let db = &DB;
     let mut users_init = RATCHET_USERS.lock().await;
     let mut devs_init: rocket::tokio::sync::MutexGuard<'_, HashMap<String, RatchetDevEntry>> = RATCHET_DEVICES.lock().await;
+    let mut user_cmd_policy_init = RATCHET_USER_CMD_POLICY.lock().await;
     let mut api_init = RATCHET_APIKEYS.lock().await;
     let write_txn = db.begin_write()?;
     {
         // write initializes tables, tables must be written before they are initialized
         write_txn.open_table(RATCHET_USERS_TABLE.unwrap())?;
         write_txn.open_table(RATCHET_DEVS_TABLE.unwrap())?;
+        write_txn.open_table(RATCHET_USER_CMD_POLICY_TABLE.unwrap())?;
         write_txn.open_table(RATCHET_APIKEY_TABLE.unwrap())?;
         // reading an empty table is a panic.
     }
@@ -662,6 +724,18 @@ async fn rtp_import_database() -> Result<(), redb::Error> {
         //println!("Got {:#?}", new_dev);
         devs_init.insert(record_key.to_string(), new_dev);
     });
+
+    let read_txn = db.begin_read()?;
+    let table = read_txn.open_table(RATCHET_USER_CMD_POLICY_TABLE.unwrap())?;
+    let table_iter = table.iter()?;
+    table_iter.for_each(|tup| {
+        let v = tup.expect("dont get this interface");
+        let val = v.1.value();
+        let val_pt = ff.decrypt(&[], &BinaryNumeralString::from_bytes_le(&val)).unwrap().to_bytes_le();
+        let val_pt = str::from_utf8(&val_pt).unwrap();
+
+        *user_cmd_policy_init = serde_json::from_str(&val_pt).unwrap();
+    });    
 
     let read_txn = db.begin_read()?;
     let table = read_txn.open_table(RATCHET_APIKEY_TABLE.unwrap())?;
@@ -883,5 +957,179 @@ impl<'r> FromRequest<'r> for RatchetApiKey {
             // bugger off
             request::Outcome::Error((Status::NotFound, RatchetAuthError::NotAuthenticated))
         }
+    }
+}
+
+#[derive(Debug)]
+struct RTPolicy(Vec<RTPolicyEntry>);
+/// validated to only contain logging-permissible outcomes
+#[derive(Debug)]
+struct RTLoggingPolicy(Vec<RTPolicyEntry>);
+#[derive(Clone, Debug)]
+struct RTPolicyEntry {
+    precedence: usize,
+    outcome: RTPolicyOutcome,
+    criteria: RTPolicyCriteria,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum RTPolicyOutcome {
+    Permit,
+    Reject,
+    Silence,
+}
+#[derive(Clone, Debug)]
+enum RTPolicyCriteria {
+    BeginsWith(String),
+    EndsWith(String),
+    Contains(String),
+}
+
+/// rt_validate_policy checks that the sent policy will be validated
+///
+/// no, saying 'policy' does not mean the kernel contains policy.
+/// CONTRACT: this code needs to be compatible with `ratchet` version
+fn rtp_validate_policy(s: &String) -> bool {
+    // Format is as follows
+    // A policy is a line-oriented collection list of blocks with
+    // ^\$$
+    // ^\($
+    // ^\)$
+    // as control
+    enum PolicyParserState {
+        Free,                       // before the first subject is encountered
+        Subject(Vec<String>),       // collecting subjects
+        Policy(Vec<RTPolicyEntry>), // applicable subject-policy mappings to append into
+    }
+
+    let mut parser_state = PolicyParserState::Free;
+    let mut new_policy = HashMap::new();
+    let mut collected_users = vec![];
+    for line in s.lines() {
+        //println!("Ratchet Debug: Parsing policy line: {line}");
+        match parser_state {
+            PolicyParserState::Free => {
+                //println!("Ratchet Debug: In state free");
+                if line == "$" {
+                    parser_state = PolicyParserState::Subject(vec![]);
+                }
+            }
+            PolicyParserState::Subject(ref mut users) => {
+                //println!("Ratchet Debug: In state subject");
+                if line == "(" {
+                    collected_users = users.clone();
+                    parser_state = PolicyParserState::Policy(vec![]);
+                } else {
+                    // do precis rewriting on subjects
+                    match rtp_fetch_precis_username(&line.as_bytes().to_vec(), true) {
+                        Ok(u) => {
+                            users.push(u);
+                        }
+                        Err(e) => {
+                            return false;
+                        }
+                    };
+                }
+            }
+            PolicyParserState::Policy(ref mut items) => {
+                //println!("Ratchet Debug: In state close");
+                if line == ")" {
+                    collected_users.drain(..).for_each(|name| {
+                        new_policy.insert(name, RTPolicy(items.to_owned()));
+                    });
+                    parser_state = PolicyParserState::Free;
+                } else {
+                    match rt_parse_policy_text(line, false) {
+                        Some(entry) => {
+                            items.push(entry);
+                        }
+                        None => {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Formatted policy must terminate all policy definitions
+    match parser_state {
+        PolicyParserState::Free => {
+            //println!("Ratchet Debug: File format incorrect, terminating policy parsing");
+        }
+        _ => {
+            return false;
+        }
+    }
+    // only replace policy atomically if it is flawless
+    // user_group_policies.clear();
+    // new_policy.drain().for_each(|z| {
+    //     user_group_policies.insert(z.0, z.1);
+    // });
+    //println!("Ratchet Debug: Processed into {user_group_policies:#?}");
+    true
+}
+
+fn rt_parse_policy_text(text: &str, logging: bool) -> Option<RTPolicyEntry> {
+    let entries = text
+        .split(|z| z as u8 == b',')
+        .take(5)
+        .collect::<Vec<&str>>();
+    //println!("Ratchet Debug: Parsing policy text got {} with {}", text, entries.len());
+    if entries.len() >= 5 {
+        let prec = match usize::from_str(entries[0]) {
+            Ok(v) => v,
+            Err(_) => {
+                return None;
+            }
+        };
+        let outcome = match entries[1] {
+            e if e == "rej" => RTPolicyOutcome::Reject,
+            e if e == "acc" => RTPolicyOutcome::Permit,
+            e if e == "sil" => {
+                if logging {
+                    RTPolicyOutcome::Silence
+                }
+                // this outcome is only applicable for logging policies
+                else {
+                    return None;
+                }
+            }
+            _ => {
+                return None;
+            }
+        };
+        let cmd_text = entries[4].to_string();
+        let matcher_type = match entries[2] {
+            e if e == "<" => RTPolicyCriteria::BeginsWith(cmd_text),
+            e if e == ">" => RTPolicyCriteria::EndsWith(cmd_text),
+            e if e == "=" => RTPolicyCriteria::Contains(cmd_text),
+            _ => {
+                return None;
+            }
+        };
+        Some(RTPolicyEntry {
+            precedence: prec,
+            outcome: outcome,
+            criteria: matcher_type,
+        })
+    } else {
+        None
+    }
+}
+
+fn rtp_fetch_precis_username(packet_text: &Vec<u8>, i18n: bool) -> Result<String, &str> {
+    let raw_username = String::from_utf8_lossy(&packet_text);
+    if i18n {
+        //println!("Ratchet Debug: Looking up {}", raw_username);
+        let username_case_preserved: UsernameCasePreserved = UsernameCasePreserved::new();
+        match username_case_preserved.prepare(raw_username) {
+            Ok(fixed_username) => {
+                //println!("Ratchet Debug: Looking up {}",fixed_username);
+                Ok(fixed_username.to_string())
+            }
+            Err(e) => Err("Ratchet Error: Bad username passed"),
+        }
+    } else {
+        Ok(raw_username.to_string())
     }
 }

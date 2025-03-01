@@ -11,7 +11,6 @@ export default function UserList ({authorizedRedirect}) {
     const init = async() => {
         setUsersLoaded(false);
         const response = await fetch('getusers');
-        setUsersLoaded(true);
         if (response.status === 200) {
             const initUsers = await response.json();
             initUsers.forEach((obj, index) => {
@@ -20,6 +19,7 @@ export default function UserList ({authorizedRedirect}) {
             setUsers( users.concat(
                 initUsers
             ));
+            setUsersLoaded(true);
         } else {
             await authorizedRedirect();
         }

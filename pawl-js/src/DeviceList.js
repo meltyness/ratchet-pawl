@@ -12,7 +12,6 @@ export default function DeviceList ({authorizedRedirect}) {
     const init = async() => {
         setDevsLoaded(false);
         const response = await fetch('getdevs');
-        setDevsLoaded(true);
         if (response.status === 200) {
             const initDevs = await response.json();
             initDevs.forEach((obj, index) => {
@@ -21,6 +20,7 @@ export default function DeviceList ({authorizedRedirect}) {
             setDevices( devices.concat(
                 initDevs
             ));
+            setDevsLoaded(true);
         } else {
             await authorizedRedirect();
         }

@@ -32,6 +32,11 @@ export default function SideBar({pageSetter=() => {}}) {
                     User Editor
                 </label>
             </div>
+            <div className="sidebar-div">
+                <label className="sidebar-item" onClick={() => {setPage("user-cmd-policies")}}>
+                    User-Command Policy
+                </label>
+            </div>
             { showLogin &&
                 <div className="sidebar-div">
                     <label className="sidebar-item" onClick={() => {setPage("pawl-login")}}>

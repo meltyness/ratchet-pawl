@@ -5,6 +5,7 @@ import UserList from "./UserList"
 import DeviceList from "./DeviceList"
 import PawlLogin from "./PawlLogin"
 import WelcomeLanding from "./WelcomeLanding"
+import UserCmdPolicies from './UserCmdPolicies';
 
 import { IconHome, IconMenu2, IconX } from '@tabler/icons-react';
 
@@ -62,7 +63,8 @@ export default function HomePanel(){
 
         {isSideBarVisible && <SideBar pageSetter={pageSelector}/>}
 
-        {selectedPage === "user-list" ? <UserList authorizedRedirect={goLogin}/> :
+        {selectedPage === "user-cmd-policies" ? <UserCmdPolicies authorizedRedirect={goLogin}/> :
+         selectedPage === "user-list" ? <UserList authorizedRedirect={goLogin}/> :
          selectedPage === "device-list" ? <DeviceList authorizedRedirect={goLogin}/> : 
          selectedPage === "pawl-login" ? <PawlLogin loginComplete={goHome}/> : 
          selectedPage === "welcome-page" ? <WelcomeLanding /> :

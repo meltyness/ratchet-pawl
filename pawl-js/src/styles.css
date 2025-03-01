@@ -68,6 +68,11 @@
     margin-bottom : -2px;
   }
 
+  .ratchet-policy-definition { 
+    height: 130px;
+    font-family: monospace;
+  }
+
   .ratchet-editable-items-list {
     width: 640px;
   }

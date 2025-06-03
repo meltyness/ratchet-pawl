@@ -32,6 +32,8 @@ They allow definition of devices and users, as well as a backend API to be fetch
   - [ ] Center justification
   - [ ] Stateful updates using Websockets
   - [ ] key entry, not *password* entry; password managers shouldn't offer
+  - [ ] "Try policy" button, to check but not submit
+  - [ ] Possibly merge this with ratchet into a workspace -- it has become apparent that policy is a shared construct.
 - [ ] Trouble monitoring
 - [ ] Advanced security
   - [ ] Neat, sanctioned, secure backup facility
